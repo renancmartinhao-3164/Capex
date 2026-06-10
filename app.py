@@ -7,17 +7,16 @@ from datetime import datetime
 # 1. CONFIGURAÇÃO DA PÁGINA E CABEÇALHO
 st.set_page_config(layout="wide", page_title="Capex Dashboard")
 
-# 2. BARRA LATERAL - UPLOAD (Declarado antes para capturar os metadados do arquivo no cabeçalho)
+# 2. BARRA LATERAL - UPLOAD
 st.sidebar.header("⚙️ Configurações")
 uploaded_file = st.sidebar.file_uploader("Arquivo Excel", type=["xlsx", "xls"], key="uploader_capex_agco")
 
-# Lógica para capturar a data de modificação/update do arquivo
+# Lógica de Metadados do Upload
 if uploaded_file is not None:
-    # Captura a data atual de processamento do upload
     data_update_txt = datetime.now().strftime("%d/%m/%Y - %H:%M")
     status_excel = f"Atualizado em: {data_update_txt} (Arquivo carregado)"
 else:
-    status_excel = "Atualizado em: 10/06/2026 - 19:04 (Dados de Demonstração)"
+    status_excel = "Atualizado em: 10/06/2026 - 16:37 (Dados de Demonstração)"
 
 # Layout do Topo (Logo + Título + Data de Update)
 col_logo, col_tit = st.columns([1, 5])
@@ -31,7 +30,6 @@ with col_logo:
 with col_tit:
     st.markdown("<h1 style='margin-bottom:0;'>Capex - Evolução do Investimento</h1>", unsafe_allow_html=True)
     st.markdown("<h3 style='margin-top:0; color: #555; margin-bottom:5px;'>Manufatura SA</h3>", unsafe_allow_html=True)
-    # Nova linha de cabeçalho com a data de update solicitada
     st.markdown(f"<p style='margin-top:0; color: #888; font-size: 14px; font-style: italic;'>📅 {status_excel}</p>", unsafe_allow_html=True)
 
 @st.cache_data
@@ -67,7 +65,7 @@ try:
     c_ano = next((o for o, n in map_c.items() if "ano" in n), df_bruto.columns[0])
     c_ver = next((o for o, n in map_c.items() if "vers" in n or "cenar" in n), df_bruto.columns[1])
     
-    # Forçando leitura estrita da Coluna D do Excel para a variável Área
+    # Forçando leitura estrita da Coluna D para a variável Área
     c_area = df_bruto.columns[3] if len(df_bruto.columns) >= 4 else df_bruto.columns[0]
     
     c_tipo = "Tipo_Proj Código" if "Tipo_Proj Código" in df_bruto.columns else next((o for o, n in map_c.items() if "tipo" in n or "proj" in n), None)
@@ -99,7 +97,7 @@ try:
 except Exception as e:
     st.error(f"Erro no mapeamento: {e}")
     st.stop()
-    # --- 4. FILTROS ---
+    # --- 4. FILTROS SUPERIORES ---
 st.write("---")
 f1, f2, f2_site, f3, f4 = st.columns(5)
 with f1: 
@@ -113,13 +111,13 @@ with f3:
     v_def = [v for v in v_list if any(x in str(v).lower() for x in ['real', 'orc', 'budg'])]
     ver_s = st.multiselect("🔄 Versão", v_list, default=v_def if v_def else [v_list[0]] if v_list else [])
 with f4: 
-    m_lim = st.selectbox("⏳ Visão YTD (Até)", m_ord, index=4)  # Padrão em Maio
+    m_lim = st.selectbox("⏳ Visão YTD (Até)", m_ord, index=4)  # Padrão: Maio
 
-# Execução do Filtro da Tela
+# Aplicação matemática estrita dos filtros sobre o DataFrame
 df_f = df_l[(df_l["Ano"] == ano_s) & (df_l["Versão"].isin(ver_s)) & (df_l["Área"].isin(area_s)) & (df_l["Planta"].isin(site_s))]
 df_f = df_f[df_f["Mês"].isin(m_ord[:m_ord.index(m_lim)+1])]
 
-# --- 5. VISUALIZAÇÕES E GRÁFICOS ---
+# --- 5. VISUALIZAÇÕES E CARTÕES ---
 if df_f.empty:
     st.warning("⚠️ Sem dados para os filtros selecionados.")
 else:
@@ -150,7 +148,7 @@ else:
     st.write("---")
     st.subheader(f"📊 Comparativo Geral Capex YTD (Jan a {m_lim}) - USD")
     
-    # 1. Gráfico Consolidado por Cenário
+    # 1. Gráfico Master Acumulado por Cenário (Respeita Filtros)
     fig_main = px.bar(df_f.groupby("Versão")["Val"].sum().reset_index(), x="Versão", y="Val", color="Versão", text_auto='.2f')
     fig_main.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
     fig_main.update_layout(yaxis_tickformat='$')
@@ -160,10 +158,11 @@ else:
     g1, g2 = st.columns(2)
     
     with g1:
-        # Gráfico Corrigido: Barras Agrupadas Lado a Lado para cada Cenário por Projeto
+        # CORREÇÃO CRUCIAL: Agrupamento explícito por Projeto + Versão para isolar as fatias de mercado
         st.subheader("📊 Cenários por Tipo de Projeto (Budget vs Fcast vs Realizado)")
         df_proj_ver = df_f.groupby(["Projeto", "Versão"])["Val"].sum().reset_index()
         
+        # O uso de color="Versão" associado ao barmode="group" impede distorções visuais
         fig_p = px.bar(
             df_proj_ver, 
             x="Projeto", 
@@ -173,7 +172,12 @@ else:
             text_auto='.2f'
         )
         fig_p.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
-        fig_p.update_layout(yaxis_tickformat='$', xaxis_title="Tipo de Projeto", legend_title="Cenário")
+        fig_p.update_layout(
+            yaxis_tickformat='$', 
+            xaxis_title="Tipo de Projeto", 
+            legend_title="Cenário",
+            xaxis={'categoryorder':'total descending'} # Ordena da maior demanda para a menor
+        )
         st.plotly_chart(fig_p, use_container_width=True)
         
     with g2:
