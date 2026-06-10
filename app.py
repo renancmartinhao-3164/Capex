@@ -2,11 +2,24 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import os
+from datetime import datetime
 
 # 1. CONFIGURAÇÃO DA PÁGINA E CABEÇALHO
 st.set_page_config(layout="wide", page_title="Capex Dashboard")
 
-# Layout do Topo (Logo + Título)
+# 2. BARRA LATERAL - UPLOAD (Declarado antes para capturar os metadados do arquivo no cabeçalho)
+st.sidebar.header("⚙️ Configurações")
+uploaded_file = st.sidebar.file_uploader("Arquivo Excel", type=["xlsx", "xls"], key="uploader_capex_agco")
+
+# Lógica para capturar a data de modificação/update do arquivo
+if uploaded_file is not None:
+    # Captura a data atual de processamento do upload
+    data_update_txt = datetime.now().strftime("%d/%m/%Y - %H:%M")
+    status_excel = f"Atualizado em: {data_update_txt} (Arquivo carregado)"
+else:
+    status_excel = "Atualizado em: 10/06/2026 - 19:04 (Dados de Demonstração)"
+
+# Layout do Topo (Logo + Título + Data de Update)
 col_logo, col_tit = st.columns([1, 5])
 with col_logo:
     logo_path = next((f for f in ["Logo AGCO.jpg", "logo.jpg"] if os.path.exists(f)), None)
@@ -17,18 +30,16 @@ with col_logo:
 
 with col_tit:
     st.markdown("<h1 style='margin-bottom:0;'>Capex - Evolução do Investimento</h1>", unsafe_allow_html=True)
-    st.markdown("<h3 style='margin-top:0; color: #555;'>Manufatura SA</h3>", unsafe_allow_html=True)
-
-# 2. BARRA LATERAL - UPLOAD
-st.sidebar.header("⚙️ Configurações")
-uploaded_file = st.sidebar.file_uploader("Arquivo Excel", type=["xlsx", "xls"], key="uploader_capex_agco")
+    st.markdown("<h3 style='margin-top:0; color: #555; margin-bottom:5px;'>Manufatura SA</h3>", unsafe_allow_html=True)
+    # Nova linha de cabeçalho com a data de update solicitada
+    st.markdown(f"<p style='margin-top:0; color: #888; font-size: 14px; font-style: italic;'>📅 {status_excel}</p>", unsafe_allow_html=True)
 
 @st.cache_data
 def dados_ficticios():
     import numpy as np
     anos, vers = [2024, 2025, 2026], ["Budget 2026", "Realizado", "Fcast 2+10"]
     areas = ["Manufacturing", "Logistics", "Quality", "Engineering"]
-    tipos = ["Capacidade", "Manutenção", "Segurança", "Inovação"]
+    tipos = ["NPI", "Legal / Regulatory", "Quality", "Infrastructure", "Maintenance", "Capacity"]
     plantas = ["Mogi", "Canoas", "Ibirubá", "Santa Rosa"]
     meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
     data = []
@@ -53,17 +64,15 @@ try:
 
     map_c = {c: limpa(c) for c in df_bruto.columns}
     
-    # Identifica colunas-chave (Área forçada estritamente na Coluna D do Excel, índice 3)
     c_ano = next((o for o, n in map_c.items() if "ano" in n), df_bruto.columns[0])
     c_ver = next((o for o, n in map_c.items() if "vers" in n or "cenar" in n), df_bruto.columns[1])
     
-    # Forçando explicitamente a Coluna D (índice 3 do DataFrame)
+    # Forçando leitura estrita da Coluna D do Excel para a variável Área
     c_area = df_bruto.columns[3] if len(df_bruto.columns) >= 4 else df_bruto.columns[0]
     
     c_tipo = "Tipo_Proj Código" if "Tipo_Proj Código" in df_bruto.columns else next((o for o, n in map_c.items() if "tipo" in n or "proj" in n), None)
     c_planta = next((o for o, n in map_c.items() if any(x in n for x in ["planta", "filial", "unidade", "site"])), None)
 
-    # Identifica meses
     m_ord = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
     m_alvo = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"]
     c_meses = []
@@ -75,7 +84,6 @@ try:
     for col in [c_area, c_tipo, c_planta]:
         if col and col not in fixas: fixas.append(col)
 
-    # Reestruturação (Wide to Long)
     df_l = df_bruto.melt(id_vars=fixas, value_vars=c_meses, var_name='M_Orig', value_name='Val')
     df_l = df_l.rename(columns={c_ano: 'Ano', c_ver: 'Versão'})
     
@@ -107,7 +115,7 @@ with f3:
 with f4: 
     m_lim = st.selectbox("⏳ Visão YTD (Até)", m_ord, index=4)  # Padrão em Maio
 
-# Aplicação dos Filtros
+# Execução do Filtro da Tela
 df_f = df_l[(df_l["Ano"] == ano_s) & (df_l["Versão"].isin(ver_s)) & (df_l["Área"].isin(area_s)) & (df_l["Planta"].isin(site_s))]
 df_f = df_f[df_f["Mês"].isin(m_ord[:m_ord.index(m_lim)+1])]
 
@@ -115,7 +123,6 @@ df_f = df_f[df_f["Mês"].isin(m_ord[:m_ord.index(m_lim)+1])]
 if df_f.empty:
     st.warning("⚠️ Sem dados para os filtros selecionados.")
 else:
-    # --- SEÇÃO DE CARTÕES DE DESTAQUE ---
     st.write("---")
     df_kpi = df_f.groupby("Versão")["Val"].sum().to_dict()
     
@@ -132,35 +139,18 @@ else:
 
     kpi1, kpi2, kpi3 = st.columns(3)
     with kpi1:
-        st.markdown(
-            f"<div style='background-color:#f8f9fa; padding:15px; border-radius:10px; border-left:5px solid #ff2a2a;'>"
-            f"<p style='margin:0; font-size:14px; color:#555; font-weight:bold;'>Realizado YTD (Jan a {m_lim})</p>"
-            f"<h2 style='margin:5px 0 0 0; color:#222;'>$ {val_real:,.2f}</h2>"
-            f"</div>", unsafe_allow_html=True
-        )
+        st.markdown(f"<div style='background-color:#f8f9fa; padding:15px; border-radius:10px; border-left:5px solid #ff2a2a;'><p style='margin:0; font-size:14px; color:#555; font-weight:bold;'>Realizado YTD (Jan a {m_lim})</p><h2 style='margin:5px 0 0 0; color:#222;'>$ {val_real:,.2f}</h2></div>", unsafe_allow_html=True)
     with kpi2:
         txt_delta_b = f"{pct_vs_budg:.1f}% do Budget" if val_budg > 0 else "Budget não selecionado"
-        st.markdown(
-            f"<div style='background-color:#f8f9fa; padding:15px; border-radius:10px; border-left:5px solid #0066cc;'>"
-            f"<p style='margin:0; font-size:14px; color:#555; font-weight:bold;'>Realizado vs Budget 2026</p>"
-            f"<h2 style='margin:5px 0 0 0; color:#0066cc;'>{txt_delta_b}</h2>"
-            f"<p style='margin:0; font-size:12px; color:#777;'>Total original: $ {val_budg:,.2f}</p>"
-            f"</div>", unsafe_allow_html=True
-        )
+        st.markdown(f"<div style='background-color:#f8f9fa; padding:15px; border-radius:10px; border-left:5px solid #0066cc;'><p style='margin:0; font-size:14px; color:#555; font-weight:bold;'>Realizado vs Budget</p><h2 style='margin:5px 0 0 0; color:#0066cc;'>{txt_delta_b}</h2><p style='margin:0; font-size:12px; color:#777;'>Total original: $ {val_budg:,.2f}</p></div>", unsafe_allow_html=True)
     with kpi3:
         txt_delta_f = f"{pct_vs_fcast:.1f}% do Forecast" if val_fcast > 0 else "Forecast não selecionado"
-        st.markdown(
-            f"<div style='background-color:#f8f9fa; padding:15px; border-radius:10px; border-left:5px solid #7cb9e8;'>"
-            f"<p style='margin:0; font-size:14px; color:#555; font-weight:bold;'>Realizado vs Forecast</p>"
-            f"<h2 style='margin:5px 0 0 0; color:#3b7aae;'>{txt_delta_f}</h2>"
-            f"<p style='margin:0; font-size:12px; color:#777;'>Total original: $ {val_fcast:,.2f}</p>"
-            f"</div>", unsafe_allow_html=True
-        )
+        st.markdown(f"<div style='background-color:#f8f9fa; padding:15px; border-radius:10px; border-left:5px solid #7cb9e8;'><p style='margin:0; font-size:14px; color:#555; font-weight:bold;'>Realizado vs Forecast</p><h2 style='margin:5px 0 0 0; color:#3b7aae;'>{txt_delta_f}</h2><p style='margin:0; font-size:12px; color:#777;'>Total original: $ {val_fcast:,.2f}</p></div>", unsafe_allow_html=True)
         # --- GRÁFICOS COM RÓTULOS ATIVADOS ---
     st.write("---")
-    st.subheader(f"📊 Comparativo Capex YTD (Jan a {m_lim}) - USD")
+    st.subheader(f"📊 Comparativo Geral Capex YTD (Jan a {m_lim}) - USD")
     
-    # 1. Barra Principal
+    # 1. Gráfico Consolidado por Cenário
     fig_main = px.bar(df_f.groupby("Versão")["Val"].sum().reset_index(), x="Versão", y="Val", color="Versão", text_auto='.2f')
     fig_main.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
     fig_main.update_layout(yaxis_tickformat='$')
@@ -168,23 +158,32 @@ else:
 
     st.write("---")
     g1, g2 = st.columns(2)
+    
     with g1:
-        st.subheader("🍕 Por Tipo de Projeto")
-        fig_p = px.pie(df_f.groupby("Projeto")["Val"].sum().reset_index(), values="Val", names="Projeto", hole=0.4)
-        fig_p.update_traces(
-            textinfo='percent+label',
-            texttemplate='%{label}<br>%{percent:.1%}<br>$%{value:,.2f}',
-            textposition='outside'
+        # Gráfico Corrigido: Barras Agrupadas Lado a Lado para cada Cenário por Projeto
+        st.subheader("📊 Cenários por Tipo de Projeto (Budget vs Fcast vs Realizado)")
+        df_proj_ver = df_f.groupby(["Projeto", "Versão"])["Val"].sum().reset_index()
+        
+        fig_p = px.bar(
+            df_proj_ver, 
+            x="Projeto", 
+            y="Val", 
+            color="Versão", 
+            barmode="group",
+            text_auto='.2f'
         )
+        fig_p.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
+        fig_p.update_layout(yaxis_tickformat='$', xaxis_title="Tipo de Projeto", legend_title="Cenário")
         st.plotly_chart(fig_p, use_container_width=True)
+        
     with g2:
-        st.subheader("🏢 Por Site")
+        st.subheader("🏢 Distribuição Total por Site")
         fig_pl = px.bar(df_f.groupby("Planta")["Val"].sum().reset_index().sort_values("Val", ascending=False), x="Planta", y="Val", color="Planta", text_auto='.2f')
         fig_pl.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
         fig_pl.update_layout(yaxis_tickformat='$', showlegend=False, xaxis_title="Site")
         st.plotly_chart(fig_pl, use_container_width=True)
 
-    # 3. Gráfico de Evolução Temporal Mensal
+    # 3. Evolução Temporal Mensal
     st.write("---")
     st.subheader("📈 Evolução Mensal Temporal")
     df_ev = df_f.groupby(["Mês", "Versão"])["Val"].sum().reset_index()
