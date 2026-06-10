@@ -223,7 +223,7 @@ except Exception as e:
     fig_ev.update_layout(yaxis_tickformat='$')
     st.plotly_chart(fig_ev, use_container_width=True)
 
-    # --- ANÁLISE COMPLEMENTAR DE PROJETOS EM ATRASO (TOP 20 ATUALIZADO) ---
+    # --- ANÁLISE COMPLEMENTAR DE PROJETOS EM ATRASO ---
     st.write("---")
     st.subheader(f"⚠️ Análise de Desvios: TOP 20 Projetos em Atraso no Desembolso YTD (Até {m_lim})")
     st.markdown("A tabela abaixo rastreia os desvios utilizando a chave estável **Nro_Item Código** combinada com a **Coluna I (Nome do Projeto)**. A ordenação foca nos maiores gargalos monetários cumulativos.")
@@ -235,26 +235,20 @@ except Exception as e:
     if not v_b or not v_r:
         st.info("ℹ️ Certifique-se de possuir dados de 'Budget' e 'Realizado' na base para gerar o cruzamento de atrasos.")
     else:
-        # Agrupamento estrito incluindo o Nome do Projeto mapeado da coluna I
         df_pivot_itens = df_analise_base.groupby(["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Versão"])["Val"].sum().unstack(level="Versão").fillna(0).reset_index()
         
         if v_b in df_pivot_itens.columns and v_r in df_pivot_itens.columns:
-            # Cálculo do Atraso Monetário
             df_pivot_itens["Atraso (USD)"] = df_pivot_itens[v_b] - df_pivot_itens[v_r]
             df_atrasados = df_pivot_itens[df_pivot_itens["Atraso (USD)"] > 0].copy()
             
             df_atrasados = df_atrasados.rename(columns={v_b: "Budget YTD", v_r: "Realizado YTD"})
-            
-            # SELEÇÃO EXPANDIDA PARA O TOP 20
             df_top_20 = df_atrasados.sort_values(by="Atraso (USD)", ascending=False).head(20)
             
             if df_top_20.empty:
                 st.success("✅ Nenhum projeto apresenta desembolso atrasado em relação ao Budget para os filtros aplicados.")
             else:
-                # Extração das colunas finais de auditoria interna
                 df_exibicao = df_top_20[["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Budget YTD", "Realizado YTD", "Atraso (USD)"]].copy()
                 
-                # CÁLCULO E INCLUSÃO DA LINHA DE TOTAL SOLICITADA
                 total_b = df_top_20["Budget YTD"].sum()
                 total_r = df_top_20["Realizado YTD"].sum()
                 total_a = df_top_20["Atraso (USD)"].sum()
@@ -269,20 +263,21 @@ except Exception as e:
                     "Atraso (USD)": total_a
                 }])
                 
-                # Anexa a linha de total na base da tabela corporativa
                 df_exibicao_com_total = pd.concat([df_exibicao, linha_total], ignore_index=True)
                 
-                # Formatação das colunas numéricas monetárias
                 for col in ["Budget YTD", "Realizado YTD", "Atraso (USD)"]:
                     df_exibicao_com_total[col] = df_exibicao_com_total[col].map(lambda x: f"$ {x:,.2f}")
                 
-                # Renderização da tabela limpa na interface
                 st.dataframe(df_exibicao_com_total, use_container_width=True, hide_index=True)
         else:
             st.warning("⚠️ Colunas de cenários insuficientes para o cruzamento de dados.")
 
+# CORREÇÃO DO ERRO DO EXPANDER (Garantindo cópia segura do estado atual do DataFrame)
 with st.expander("🔍 Ver Tabela de Dados Brutos"):
-    df_view = df_f.copy()
-    df_view['Val'] = df_view['Val'].map(lambda x: f"$ {x:,.2f}")
-    st.dataframe(df_view, use_container_width=True)
-    
+    if 'df_f' in locals() and not df_f.empty:
+        df_view = df_f.copy()
+        df_view['Val'] = df_view['Val'].map(lambda x: f"$ {x:,.2f}")
+        st.dataframe(df_view, use_container_width=True)
+    else:
+        st.info("Nenhum dado bruto encontrado para os filtros selecionados.")
+        
