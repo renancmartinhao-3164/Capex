@@ -19,7 +19,7 @@ with col_tit:
     st.markdown("<h1 style='margin-bottom:0;'>Capex - Evolução do Investimento</h1>", unsafe_allow_html=True)
     st.markdown("<h3 style='margin-top:0; color: #555;'>Manufatura SA</h3>", unsafe_allow_html=True)
 
-# 2. BARRA LATERAL - UPLOAD (Adicionado o argumento key para matar o erro de ID duplicado)
+# 2. BARRA LATERAL - UPLOAD
 st.sidebar.header("⚙️ Configurações")
 uploaded_file = st.sidebar.file_uploader("Arquivo Excel", type=["xlsx", "xls"], key="uploader_capex_agco")
 
@@ -43,7 +43,7 @@ def dados_ficticios():
 
 df_bruto = pd.read_excel(uploaded_file) if uploaded_file is not None else dados_ficticios()
 if uploaded_file is not None: st.sidebar.success("Excel carregado!")
-# --- 3. TRATAMENTO DOS DADOS ---
+    # --- 3. TRATAMENTO DOS DADOS ---
 try:
     def limpa(t):
         t = str(t).lower().strip()
@@ -53,10 +53,13 @@ try:
 
     map_c = {c: limpa(c) for c in df_bruto.columns}
     
-    # Identifica colunas-chave
+    # Identifica colunas-chave (Área forçada estritamente na Coluna D do Excel, índice 3)
     c_ano = next((o for o, n in map_c.items() if "ano" in n), df_bruto.columns[0])
     c_ver = next((o for o, n in map_c.items() if "vers" in n or "cenar" in n), df_bruto.columns[1])
-    c_area = next((o for o, n in map_c.items() if any(x in n for x in ["area", "cc"]) and "proj" not in n and o not in [c_ano, c_ver]), None)
+    
+    # Forçando explicitamente a Coluna D (índice 3 do DataFrame)
+    c_area = df_bruto.columns[3] if len(df_bruto.columns) >= 4 else df_bruto.columns[0]
+    
     c_tipo = "Tipo_Proj Código" if "Tipo_Proj Código" in df_bruto.columns else next((o for o, n in map_c.items() if "tipo" in n or "proj" in n), None)
     c_planta = next((o for o, n in map_c.items() if any(x in n for x in ["planta", "filial", "unidade", "site"])), None)
 
@@ -70,7 +73,7 @@ try:
 
     fixas = [c_ano, c_ver]
     for col in [c_area, c_tipo, c_planta]:
-        if col: fixas.append(col)
+        if col and col not in fixas: fixas.append(col)
 
     # Reestruturação (Wide to Long)
     df_l = df_bruto.melt(id_vars=fixas, value_vars=c_meses, var_name='M_Orig', value_name='Val')
@@ -78,7 +81,7 @@ try:
     
     map_m = dict(zip(c_meses, m_ord))
     df_l['Mês'] = df_l['M_Orig'].map(map_m)
-    df_l['Área'] = df_l[c_area] if c_area else 'Geral'
+    df_l['Área'] = df_l[c_area]
     df_l['Projeto'] = df_l[c_tipo] if c_tipo else 'Geral'
     df_l['Planta'] = df_l[c_planta] if c_planta else 'Geral'
     
@@ -88,7 +91,7 @@ try:
 except Exception as e:
     st.error(f"Erro no mapeamento: {e}")
     st.stop()
-# --- 4. FILTROS ---
+    # --- 4. FILTROS ---
 st.write("---")
 f1, f2, f2_site, f3, f4 = st.columns(5)
 with f1: 
@@ -153,7 +156,7 @@ else:
             f"<p style='margin:0; font-size:12px; color:#777;'>Total original: $ {val_fcast:,.2f}</p>"
             f"</div>", unsafe_allow_html=True
         )
-# --- GRÁFICOS COM RÓTULOS ATIVADOS ---
+        # --- GRÁFICOS COM RÓTULOS ATIVADOS ---
     st.write("---")
     st.subheader(f"📊 Comparativo Capex YTD (Jan a {m_lim}) - USD")
     
@@ -199,3 +202,4 @@ with st.expander("🔍 Ver Tabela de Dados"):
     df_view = df_f.copy()
     df_view['Val'] = df_view['Val'].map(lambda x: f"$ {x:,.2f}")
     st.dataframe(df_view, use_container_width=True)
+    
