@@ -283,12 +283,13 @@ else:
         st.plotly_chart(fig_pareto, use_container_width=True)
     else:
         fig_scatter, fig_run, fig_pareto = None, None, None
-
-
-    # 5. TABELA ANALÍTICA DE ATRASOS
+# =========================================================
+    # 5. TABELA ANALÍTICA COM SEMÁFORO E JUSTIFICATIVAS (CAMPOS 1 e 2)
+    # =========================================================
     st.write("---")
     st.subheader(f"⚠️ Análise de Desvios: TOP 20 Projetos em Atraso no Desembolso YTD (Até {m_lim})")
-    
+    st.markdown("Abaixo estão listados os maiores desvios. A tabela utiliza **alertas visuais** para identificar a criticidade do atraso.")
+
     if v_b and v_r and v_b in df_cross.columns:
         df_atrasados = df_cross[df_cross["Atraso (USD)"] > 0].copy()
         df_atrasados = df_atrasados.rename(columns={v_b: "Budget YTD", v_r: "Realizado YTD"})
@@ -297,147 +298,39 @@ else:
         if df_top_20.empty:
             st.success("✅ Nenhum projeto apresenta desembolso atrasado em relação ao Budget para os filtros aplicados.")
         else:
+            # Preparação do DataFrame de Exibição para o Streamlit
             df_exibicao = df_top_20[["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Budget YTD", "Realizado YTD", "Atraso (USD)"]].copy()
-            total_b = df_top_20["Budget YTD"].sum()
-            total_r = df_top_20["Realizado YTD"].sum()
-            total_a = df_top_20["Atraso (USD)"].sum()
             
-            linha_total = pd.DataFrame([{
-                "Nro_Item Código": "TOTAL DO TOP 20", "Nome do Projeto": "---", "Área": "---", "Planta": "---",
-                "Budget YTD": total_b, "Realizado YTD": total_r, "Atraso (USD)": total_a
-            }])
+            # --- CAMPO 1: APLICANDO O SINALIZADOR VISUAL (SEMÁFORO) ---
+            # Função interna para colorir o background da coluna de Atraso com base no valor do desvio
+            def colorir_semaforo(val):
+                if isinstance(val, (int, float)):
+                    if val > 100000:  # Crítico: Acima de 100k USD
+                        return 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
+                    elif val > 30000:  # Atenção: Entre 30k e 100k USD
+                        return 'background-color: #fff3cd; color: #856404;'
+                    else:  # Tolerável: Abaixo de 30k USD
+                        return 'background-color: #d4edda; color: #155724;'
+                return ''
+
+            # Exibição com formatação condicional e de moeda no Streamlit
+            st.dataframe(
+                df_exibicao.style.applymap(colorir_semaforo, subset=["Atraso (USD)"])
+                .format({"Budget YTD": "$ {:,.2f}", "Realizado YTD": "$ {:,.2f}", "Atraso (USD)": "$ {:,.2f}"}),
+                use_container_width=True,
+                hide_index=True
+            )
             
-            df_exibicao_com_total = pd.concat([df_exibicao, linha_total], ignore_index=True)
-            for col in ["Budget YTD", "Realizado YTD", "Atraso (USD)"]:
-                df_exibicao_com_total[col] = df_exibicao_com_total[col].map(lambda x: f"$ {x:,.2f}")
+            # --- CAMPO 2: CAMPO DE JUSTIFICATIVA EXECUTIVA DINÂMICA ---
+            st.write("")
+            st.markdown("### 💬 Detalhamento e Justificativa por Iniciativa")
             
-            st.dataframe(df_exibicao_com_total, use_container_width=True, hide_index=True)
+            # Cria uma lista de seleção combinando o Código e Nome do Projeto para o Diretor escolher
+            lista_projetos_justificativa = df_exibicao.apply(lambda r: f"{r['Nro_Item Código']} - {r['Nome do Projeto']}", axis=1).tolist()
+            projeto_selecionado = st.selectbox("Selecione um projeto crítico para avaliar a justificativa do Site:", lista_projetos_justificativa)
+            
+            if ...
 
+            
 
-# ==========================================
-# PARTE COMPLEMENTAR: EXPORTAÇÃO EXECUTIVA AMPLIADA
-# ==========================================
-st.write("---")
-st.subheader("🖨️ Exportação Completa para Diretoria")
-st.markdown("Clique no botão abaixo para gerar o report consolidado completo contendo todas as novas visões e gráficos coloridos.")
-
-try:
-    chart_main_html = fig_main.to_html(full_html=False, include_plotlyjs='cdn')
-    chart_p_html = fig_p.to_html(full_html=False, include_plotlyjs='cdn')
-    chart_pl_html = fig_pl.to_html(full_html=False, include_plotlyjs='cdn')
-    chart_ev_html = fig_ev.to_html(full_html=False, include_plotlyjs='cdn')
     
-    # Inclusão segura dos novos gráficos no PDF caso existam dados válidos
-    chart_scatter_html = fig_scatter.to_html(full_html=False, include_plotlyjs='cdn') if fig_scatter else ""
-    chart_run_html = fig_run.to_html(full_html=False, include_plotlyjs='cdn') if fig_run else ""
-    chart_pareto_html = fig_pareto.to_html(full_html=False, include_plotlyjs='cdn') if fig_pareto else ""
-
-    html_report = f"""
-    <!DOCTYPE html>
-    <html lang="pt-BR">
-    <head>
-        <meta charset="UTF-8">
-        <style>
-            * {{ -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }}
-            @media print {{ body {{ background: #fff; }} .report-wrapper {{ border: none !important; box-shadow: none !important; padding: 0 !important; }} }}
-            @page {{ size: A4; margin: 20mm 15mm 20mm 15mm; }}
-            body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #2b2b2b; margin: 0; padding: 20px; background-color: #fafafa; }}
-            .report-wrapper {{ max-width: 900px; margin: 0 auto; background: #fff; padding: 40px; border: 1px solid #e0e0e0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }}
-            .header {{ border-bottom: 3px solid #a11f1f; padding-bottom: 12px; margin-bottom: 25px; }}
-            .title {{ font-size: 20pt; font-weight: bold; color: #a11f1f; text-transform: uppercase; }}
-            .subtitle {{ font-size: 11pt; color: #555; margin-top: 5px; }}
-            h2 {{ font-size: 13pt; color: #1a1a1a; margin: 35px 0 15px 0; padding-left: 8px; border-left: 4px solid #a11f1f; text-transform: uppercase; page-break-after: avoid; }}
-            p {{ font-size: 10pt; color: #444; margin-bottom: 12px; }}
-            table.kpi-table {{ width: 100%; border-collapse: separate; border-spacing: 12px 0; margin: 15px -12px; }}
-            td.kpi-card {{ width: 33.33%; background-color: #f8f9fa !important; border: 1px solid #e9ecef; padding: 14px; border-left: 4px solid #a11f1f !important; }}
-            .chart-box {{ background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; margin-bottom: 30px; page-break-inside: avoid; }}
-            table.data-table {{ width: 100%; border-collapse: collapse; margin-top: 15px; page-break-inside: avoid; }}
-            table.data-table th {{ background-color: #343a40 !important; color: white !important; padding: 9px 10px; font-size: 9pt; text-transform: uppercase; }}
-            table.data-table td {{ padding: 8px 10px; border: 1px solid #dee2e6; font-size: 9pt; }}
-            table.data-table tr:nth-child(even) {{ background-color: #f8f9fa !important; }}
-            table.data-table tr.total-row {{ background-color: #e9ecef !important; font-weight: bold; }}
-            .numeric {{ text-align: right; }}
-            .negative {{ color: #c9302c; font-weight: bold; }}
-        </style>
-    </head>
-    <body>
-        <div class="report-wrapper">
-            <div class="header">
-                <div class="title">Capex - Status Corporativo Global</div>
-                <div class="subtitle">Book Executivo Consolidado — América do Sul — Ano {ano_s} (YTD até {m_lim})</div>
-            </div>
-
-            <table class="kpi-table">
-                <tr>
-                    <td class="kpi-card"><div style="font-size:8pt;color:#6c757d;">REALIZADO YTD</div><div style="font-size:14pt;font-weight:bold;">$ {val_real:,.2f}</div></td>
-                    <td class="kpi-card" style="border-left-color: #0066cc !important;"><div style="font-size:8pt;color:#6c757d;">BUDGET YTD</div><div style="font-size:14pt;font-weight:bold;">$ {val_budg:,.2f}</div></td>
-                    <td class="kpi-card" style="border-left-color: #3b7aae !important;"><div style="font-size:8pt;color:#6c757d;">FORECAST (2+10)</div><div style="font-size:14pt;font-weight:bold;">$ {val_fcast:,.2f}</div></td>
-                </tr>
-            </table>
-
-            <h2>1. Evolução e Sumário por Estruturas e Sites</h2>
-            <div class="chart-box">{chart_main_html}</div>
-            <div class="chart-box">{chart_p_html}</div>
-            <div class="chart-box">{chart_pl_html}</div>
-            <div class="chart-box">{chart_ev_html}</div>
-
-            <h2>2. Matriz de Alocação e Criticidade de Desvios</h2>
-            <div class="chart-box">{chart_scatter_html}</div>
-
-            <h2>3. Análise Preditiva de Fechamento (Run Rate Anual)</h2>
-            <div class="chart-box">{chart_run_html}</div>
-
-            <h2>4. Concentração de Linhas de Investimento (Pareto Top 15)</h2>
-            <div class="chart-box">{chart_pareto_html}</div>
-
-            <h2>5. Análise Mapeada de Desvios Críticos: TOP 20 Projetos</h2>
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Item</th><th>Nome do Projeto</th><th>Área</th><th>Planta</th>
-                        <th class="numeric">Budget YTD</th><th class="numeric">Realizado YTD</th><th class="numeric">Atraso</th>
-                    </tr>
-                </thead>
-                <tbody>
-    """
-
-    if 'df_top_20' in locals() and not df_top_20.empty:
-        for _, r in df_top_20.iterrows():
-            html_report += f"""
-                <tr>
-                    <td>{r['Nro_Item Código']}</td><td>{r['Nome do Projeto']}</td><td>{r['Área']}</td><td>{r['Planta']}</td>
-                    <td class="numeric">$ {r['Budget YTD']:,.2f}</td><td class="numeric">$ {r['Realizado YTD']:,.2f}</td>
-                    <td class="numeric negative">$ {r['Atraso (USD)']:,.2f}</td>
-                </tr>
-            """
-        html_report += f"""
-                <tr class="total-row">
-                    <td>TOTAL TOP 20</td><td>---</td><td>---</td><td>---</td>
-                    <td class="numeric">$ {total_b:,.2f}</td><td class="numeric">$ {total_r:,.2f}</td>
-                    <td class="numeric negative">$ {total_a:,.2f}</td>
-                </tr>
-        """
-    html_report += """
-                </tbody>
-            </table>
-        </div>
-    </body>
-    </html>
-    """
-
-    st.download_button(
-        label="📥 Baixar Livro Executivo Ampliado (PDF/HTML)",
-        data=html_report,
-        file_name=f"Book_Executivo_Capex_{m_lim}_{ano_s}.html",
-        mime="text/html"
-    )
-except Exception as err_pdf:
-    st.sidebar.error(f"Erro ao injetar novos gráficos na exportação: {err_pdf}")
-
-with st.expander("🔍 Ver Tabela de Dados Brutos"):
-    if 'df_f' in locals() and not df_f.empty:
-        df_view = df_f.copy()
-        df_view['Val'] = df_view['Val'].map(lambda x: f"$ {x:,.2f}")
-        st.dataframe(df_view, use_container_width=True)
-
-
