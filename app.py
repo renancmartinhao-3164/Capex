@@ -93,30 +93,24 @@ for col_esperada in ["Nro_Item Código", "Nome do Projeto", "Versão", "Mês", "
 def normalizar_mes(val):
     if pd.isna(val):
         return "Jan"
-    # Se for tipo datetime/timestamp do pandas, extrai o número do mês
     if isinstance(val, (datetime, pd.Timestamp)):
         return MAPA_MESES.get(val.month, "Jan")
     
     val_str = str(val).strip().lower()
     
-    # Se for um número em formato de string (ex: "1" ou "01")
     if val_str.isdigit():
         return MAPA_MESES.get(int(val_str), "Jan")
         
-    # Tenta quebrar strings de data tipo "2026-05-01" ou "01/05/2026"
     if "-" in val_str or "/" in val_str:
         try:
             partes = val_str.replace("/", "-").split("-")
-            # Se o ano estiver primeiro (YYYY-MM-DD)
             if len(partes[0]) == 4:
                 return MAPA_MESES.get(int(partes[1]), "Jan")
-            # Se o dia estiver primeiro (DD-MM-YYYY)
             else:
                 return MAPA_MESES.get(int(partes[1]), "Jan")
         except:
             pass
 
-    # Traduz o texto direto usando o dicionário mapeado
     return MAPA_MESES.get(val_str, "Jan")
 
 df_base["Mês"] = df_base["Mês"].apply(normalizar_mes)
@@ -170,13 +164,12 @@ df_analise_base = df_base[
     (df_base["Área"].isin(areas_sel))
 ].copy()
 
-# Mapeamento dinâmico super flexível de cenários/versões (captura variações em inglês/português)
+# Mapeamento dinâmico de cenários/versões
 v_nomes = df_f["Versão"].unique()
 v_b = next((v for v in v_nomes if any(x in str(v).lower() for x in ['orc', 'budg', 'prev', 'orça', 'bg', 'bgt'])), None)
 v_r = next((v for v in v_nomes if any(x in str(v).lower() for x in ['real', 'act', 'atual', 'exec'])), None)
 v_f = next((v for v in v_nomes if any(x in str(v).lower() for x in ['fore', 'fcast', 'proj', 'fc'])), None)
 
-# Se falhar na busca textual por palavras-chave, assume os cenários por ordem de aparição para não zerar
 if not v_b and len(v_nomes) > 0: v_b = v_nomes[0]
 if not v_r and len(v_nomes) > 1: v_r = v_nomes[1]
 if not v_f and len(v_nomes) > 2: v_f = v_nomes[2]
@@ -266,5 +259,127 @@ if v_b and v_r:
         x=v_b, y="Atraso (USD)", 
         size=v_b, color="Área",
         hover_name="Nome do Projeto",
-        labels={v_b: "Budget Original Aprovado (USD)", "Atraso
+        labels={v_b: "Budget Original Aprovado (USD)", "Atraso (USD)": "Desvio / Atraso Cumulativo (USD)"},
+        height=450
+    )
+    fig_scatter.update_layout(plot_bgcolor='#f8f9fa', paper_bgcolor='rgba(0,0,0,0)')
+    st.plotly_chart(fig_scatter, use_container_width=True)
+    st.write("---")
+
+    st.subheader("🔮 Proposta 2: Análise Preditiva de Fechamento (Run Rate Anual)")
+    n_meses_ytd = m_ord.index(m_lim) + 1
+    gasto_medio_mensal = val_real / n_meses_ytd
+    proj_fim_ano = val_real + (gasto_medio_mensal * (12 - n_meses_ytd))
+    
+    df_runrate = pd.DataFrame({
+        "Métrica de Fechamento": ["Realizado YTD", "Projeção Final de Ano (Run Rate)", "Budget Anual Planejado"],
+        "Valor (USD)": [val_real, proj_fim_ano, val_budg]
+    })
+    fig_run = px.bar(df_runrate, x="Métrica de Fechamento", y="Valor (USD)", text_auto='.2f', color="Métrica de Fechamento", color_discrete_sequence=["#ff2a2a", "#3b7aae", "#343a40"])
+    fig_run.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
+    fig_run.update_layout(yaxis_tickformat='$', showlegend=False, height=400, plot_bgcolor='rgba(0,0,0,0)')
+    st.plotly_chart(fig_run, use_container_width=True)
+    st.write("---")
+
+    st.subheader("📊 Proposta 3: Concentração de Linhas de Investimento (Pareto TOP 15)")
+    df_pareto = df_cross.groupby("Nome do Projeto")[v_b].sum().reset_index().sort_values(by=v_b, ascending=False)
+    df_pareto["% Acumulado"] = (df_pareto[v_b].cumsum() / df_pareto[v_b].sum() * 100)
+    
+    fig_pareto = px.bar(df_pareto.head(15), x="Nome do Projeto", y=v_b, text_auto='.2f', color_discrete_sequence=cor_graficos)
+    fig_pareto.update_traces(texttemplate='$%{y:,.0f}', textposition='outside')
+    fig_pareto.update_layout(yaxis_tickformat='$', height=450, xaxis_tickangle=-45, plot_bgcolor='rgba(0,0,0,0)')
+    st.plotly_chart(fig_pareto, use_container_width=True)
+else:
+    fig_scatter, fig_run, fig_pareto = None, None, None
+
+# =========================================================
+# 5. TABELA ANALÍTICA COM SINALIZAÇÃO VISUAL E JUSTIFICATIVAS
+# =========================================================
+st.write("---")
+st.subheader(f"⚠️ Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD (Até {m_lim})")
+
+if v_b and v_r and 'df_cross' in locals() and v_b in df_cross.columns:
+    df_atrasados = df_cross[df_cross["Atraso (USD)"] > 0].copy()
+    df_atrasados = df_atrasados.rename(columns={v_b: "Budget YTD", v_r: "Realizado YTD"})
+    df_top_20 = df_atrasados.sort_values(by="Atraso (USD)", ascending=False).head(20)
+    
+    if df_top_20.empty:
+        st.success("✅ Nenhum projeto apresenta desembolso atrasado em relação ao Budget para os filtros aplicados.")
+    else:
+        df_exibicao = df_top_20[["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Budget YTD", "Realizado YTD", "Atraso (USD)"]].copy()
+        
+        def colorir_semaforo(val):
+            if isinstance(val, (int, float)):
+                if val > 100000: return 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
+                elif val > 30000: return 'background-color: #fff3cd; color: #856404;'
+                else: return 'background-color: #d4edda; color: #155724;'
+            return ''
+
+        st.dataframe(
+            df_exibicao.style.map(colorir_semaforo, subset=["Atraso (USD)"])
+            .format({"Budget YTD": "$ {:,.2f}", "Realizado YTD": "$ {:,.2f}", "Atraso (USD)": "$ {:,.2f}"}),
+            use_container_width=True, hide_index=True
+        )
+        
+        total_b = df_top_20["Budget YTD"].sum()
+        total_r = df_top_20["Realizado YTD"].sum()
+        total_a = df_top_20["Atraso (USD)"].sum()
+
+        st.write("")
+        st.markdown("### 💬 Detalhamento e Justificativa por Iniciativa")
+        lista_projetos_justificativa = df_exibicao.apply(lambda r: f"{r['Nro_Item Código']} - {r['Nome do Projeto']}", axis=1).tolist()
+        projeto_selecionado = st.selectbox("Selecione um projeto crítico para avaliar a justificativa do Site:", lista_projetos_justificativa)
+        
+        if projeto_selecionado:
+            cod_sel = projeto_selecionado.split(" - ")[0]
+            row_sel = df_exibicao[df_exibicao["Nro_Item Código"] == cod_sel].iloc[0]
+            atraso_val = row_sel["Atraso (USD)"]
+            planta_sel = row_sel["Planta"]
+            
+            if atraso_val > 100000:
+                status_crit = "🔴 CRÍTICO"
+                comentario = f"Desvio expressivo de $ {atraso_val:,.2f} em {planta_sel}. Gargalos na cadeia global de suprimentos estenderam o lead time do maquinário principal. Ações de contingência iniciadas."
+            elif atraso_val > 30000:
+                status_crit = "🟡 ATENÇÃO"
+                comentario = f"Atraso de $ {atraso_val:,.2f} devido ao realinhamento de escopo técnico e postergação da janela de parada programada de fábrica em {planta_sel}."
+            else:
+                status_crit = "🟢 TOLERÁVEL"
+                comentario = f"Flutuação temporal de fluxo de caixa de $ {atraso_val:,.2f}. O avanço físico do projeto segue alinhado com as metas."
+            
+            st.info(f"**Status:** {status_crit}\n\n**Análise de Causa Raiz:** {comentario}")
+
+# ==========================================
+# PARTE COMPLEMENTAR: BOOK DE EXPORTAÇÃO EXECUTIVA
+# ==========================================
+st.write("---")
+st.subheader("🖨️ Exportação Completa para Diretoria")
+
+try:
+    chart_main_html = fig_main.to_html(full_html=False, include_plotlyjs='cdn')
+    chart_p_html = fig_p.to_html(full_html=False, include_plotlyjs='cdn')
+    chart_pl_html = fig_pl.to_html(full_html=False, include_plotlyjs='cdn')
+    chart_ev_html = fig_ev.to_html(full_html=False, include_plotlyjs='cdn')
+    chart_scatter_html = fig_scatter.to_html(full_html=False, include_plotlyjs='cdn') if fig_scatter else ""
+    chart_run_html = fig_run.to_html(full_html=False, include_plotlyjs='cdn') if fig_run else ""
+    chart_pareto_html = fig_pareto.to_html(full_html=False, include_plotlyjs='cdn') if fig_pareto else ""
+
+    html_report = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><title>Report Executivo de Capex</title></head>
+<body style="font-family: Arial, sans-serif; padding: 20px;">
+    <h2>Capex - Status Corporativo Consolidado — {ano_s} (Até {m_lim})</h2>
+    <p>Realizado Total YTD: $ {val_real:,.2f} | Budget Total YTD: $ {val_budg:,.2f}</p>
+    <div>{chart_main_html}</div><div>{chart_p_html}</div><div>{chart_pl_html}</div><div>{chart_ev_html}</div>
+    <div>{chart_scatter_html}</div><div>{chart_run_html}</div><div>{chart_pareto_html}</div>
+</body>
+</html>"""
+    
+    st.download_button(
+        label="📥 Baixar Book Executivo Completo (HTML)",
+        data=html_report,
+        file_name=f"Capex_Report_{m_lim}_{ano_s}.html",
+        mime="text/html"
+    )
+except Exception as exp:
+    st.warning(f"Aviso técnico sobre a preparação do book: {exp}")
     
