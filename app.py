@@ -74,12 +74,16 @@ if df_base is not None:
             mapeamento_colunas[col] = "Nro_Item Código"
         elif col_lower in ['nome do projeto', 'projeto', 'nome', 'descrição', 'descricao']:
             mapeamento_colunas[col] = "Nome do Projeto"
+        elif col_lower in ['ano', 'exercício', 'exercicio', 'ano_base']:
+            mapeamento_colunas[col] = "Ano"
             
     df_base = df_base.rename(columns=mapeamento_colunas)
 
     m_ord = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
     colunas_meses_encontradas = [m for m in m_ord if m in df_base.columns]
-    colunas_identificadoras = [c for c in ["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Versão"] if c in df_base.columns]
+    
+    # Adiciona a coluna Ano aos identificadores se ela existir nativamente na planilha
+    colunas_identificadoras = [c for c in ["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Versão", "Ano"] if c in df_base.columns]
 
     if colunas_meses_encontradas:
         df_base = pd.melt(
@@ -101,6 +105,10 @@ df_base["Mês"] = df_base["Mês"].astype(str).str.strip()
 df_base["Planta"] = df_base["Planta"].astype(str).str.strip()
 df_base["Área"] = df_base["Área"].astype(str).str.strip()
 df_base["Val"] = pd.to_numeric(df_base["Val"], errors='coerce').fillna(0.0)
+
+# Se a planilha tiver uma coluna de Ano, garante o tipo inteiro para a comparação
+if "Ano" in df_base.columns:
+    df_base["Ano"] = pd.to_numeric(df_base["Ano"], errors='coerce').fillna(0).astype(int)
 
 # ==========================================
 # PARTE 3: FILTROS CORPORATIVOS DINÂMICOS
@@ -136,14 +144,22 @@ df_base = df_base[
     ~df_base["Nro_Item Código"].astype(str).str.lower().str.contains('|'.join(palavras_chave_total))
 ]
 
-# 2. FILTRAGEM DO ESCOPO SELECIONADO NA TELA (YTD + Escopo)
+# 2. FILTRAGEM DO ESCOPO SELECIONADO NA TELA (Mês YTD + Planta + Área + CORREÇÃO DO ANO)
+# Se a planilha não tiver coluna de Ano, tratamos como se tudo fosse do ano ativo para não quebrar.
+if "Ano" in df_base.columns and df_base["Ano"].max() > 0:
+    filtro_ano = (df_base["Ano"] == int(ano_s))
+else:
+    filtro_ano = True
+
 df_f = df_base[
+    filtro_ano &
     (df_base["Mês"].isin(meses_ytd)) &
     (df_base["Planta"].isin(plantas_sel)) &
     (df_base["Área"].isin(areas_sel))
 ].copy()
 
 df_analise_base = df_base[
+    filtro_ano &
     (df_base["Planta"].isin(plantas_sel)) &
     (df_base["Área"].isin(areas_sel))
 ].copy()
@@ -156,18 +172,16 @@ v_b = next((v for v in v_nomes if any(x in str(v).lower() for x in ['budget', 'o
 if not v_b:
     v_b = next((v for v in v_nomes if 'orc' in str(v).lower() or 'bud' in str(v).lower()), None)
 
-# B. Identifica o Fcast 2+10 (Nomenclatura oficial do utilizador)
+# B. Identifica o Fcast 2+10
 v_f = next((v for v in v_nomes if any(x in str(v).lower() for x in ['fcast', '2+10', 'forecast', 'fore'])), None)
 
 # C. Identifica o Realizado por Eliminação Absoluta
-# O Realizado será qualquer cenário que NÃO seja o Budget e NÃO seja o Forecast mapeados acima
 v_r = next((v for v in v_nomes if v != v_b and v != v_f), None)
 
-# Fallback de segurança clássico caso a eliminação falhe
 if not v_r:
     v_r = next((v for v in v_nomes if any(x in str(v).lower() for x in ['real', 'realizado', 'efetivado'])), None)
 
-# Cálculo final dos KPIs macros com isolamento garantido por filtros booleanos indexados
+# Cálculo final dos KPIs macros com isolamento de ano e mês aplicados
 val_budg = df_f[df_f["Versão"] == v_b]["Val"].sum() if v_b else 0.0
 val_fcast = df_f[df_f["Versão"] == v_f]["Val"].sum() if v_f else 0.0
 val_real = df_f[df_f["Versão"] == v_r]["Val"].sum() if v_r else 0.0
@@ -304,7 +318,7 @@ if v_b and v_r and 'df_cross' in locals() and v_b in df_cross.columns and v_r in
             "Budget YTD": total_b, "Realizado YTD": total_r, "Atraso (USD)": total_a
         }])
         
-        df_exibicao_com_total = pd.concat([df_exibicao, linha_total], ignore_index=True)
+        df_exibicao_com_total = pd.concat([df_exibicao, Appended_Row if 'Appended_Row' in locals() else linha_total], ignore_index=True)
         for col in ["Budget YTD", "Realizado YTD", "Atraso (USD)"]:
             df_exibicao_com_total[col] = df_exibicao_com_total[col].map(lambda x: f"$ {x:,.2f}")
         
@@ -342,10 +356,6 @@ try:
             table.kpi-table {{ width: 100%; border-collapse: separate; border-spacing: 12px 0; margin: 15px -12px; }}
             td.kpi-card {{ width: 33.33%; background-color: #f8f9fa !important; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; border-left: 4px solid #a11f1f !important; }}
             .chart-box {{ background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; margin-bottom: 30px; }}
-            table.data-table {{ width: 100%; border-collapse: collapse; margin-top: 15px; }}
-            table.data-table th {{ background-color: #343a40 !important; color: white !important; padding: 10px; font-size: 9pt; border: 1px solid #343a40; }}
-            table.data-table td {{ padding: 8px 10px; border: 1px solid #dee2e6; font-size: 9pt; }}
-            .numeric {{ text-align: right; }}
         </style>
     </head>
     <body>
@@ -383,8 +393,7 @@ except Exception as err_pdf:
 # EXPANDER DE SEGURANÇA (DADOS BRUTOS)
 with st.expander("🔍 Ver Tabela de Dados Brutos"):
     if 'df_f' in locals() and not df_f.empty:
-        st.write("**Cenários identificados nesta execução:**", list(v_nomes))
-        st.write(f"👉 Mapeado como Budget: `{v_b}` | Mapeado como Forecast: `{v_f}` | Mapeado como Realizado: `{v_r}`")
+        st.write("**Filtros ativos:**", f"Ano Orçamentário: {ano_s} | Período: Jan a {m_lim}")
         df_view = df_f.copy()
         df_view['Val'] = df_view['Val'].map(lambda x: f"$ {x:,.2f}")
         st.dataframe(df_view, use_container_width=True)
