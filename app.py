@@ -488,4 +488,4 @@ with st.expander("🔍 Ver Tabela de Dados Brutos"):
         df_view['Val'] = df_view['Val'].map(lambda x: f"$ {x:,.2f}")
         st.dataframe(df_view, use_container_width=True)
     else:
-        st.info("Nenhum dado bruto encontrado
+        st.info("Nenhum dado bruto encontrado para os filtros selecionados.")
