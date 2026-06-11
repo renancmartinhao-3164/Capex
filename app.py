@@ -31,7 +31,7 @@ if origem_dados == "Usar Última Base (Servidor)":
     if os.path.exists(ARQUIVO_PADRAO):
         try:
             df_base = carregar_dados_excel(ARQUIVO_PADRAO)
-            st.sidebar.success("✅ Base padrão do servidor carregada!")
+            st.sidebar.success("Base padrão carregada!")
         except Exception as e:
             st.sidebar.error(f"Erro ao ler a base padrão: {e}")
             st.stop()
@@ -61,10 +61,10 @@ else:
 # PARTE 2: PADRONIZAÇÃO E DESPIVOTEAMENTO (HORIZONTAl -> VERTICAL)
 # =========================================================
 if df_base is not None:
-    # 1. Remove espaços invisíveis antes e depois dos nomes de todas as colunas
+    # 1. Remove espaços invisíveis dos nomes das colunas originais
     df_base.columns = df_base.columns.astype(str).str.strip()
     
-    # 2. Mapeamento ultra flexível de colunas fixas (ajuste os nomes abaixo se necessário)
+    # 2. Mapeamento inteligente de colunas fixas para tolerar variações de escrita
     mapeamento_colunas = {}
     for col in df_base.columns:
         col_lower = col.lower()
@@ -72,22 +72,22 @@ if df_base is not None:
             mapeamento_colunas[col] = "Versão"
         elif col_lower in ['planta', 'site', 'unidade', 'filial', 'plantas', 'sites']:
             mapeamento_colunas[col] = "Planta"
-        elif col_lower in ['área', 'area', 'diretoria', 'setor', 'áreas', 'areas', 'departamento']:
+        elif col_lower in ['área', 'area', 'diretoria', 'setor', 'áreas', 'areas']:
             mapeamento_colunas[col] = "Área"
-        elif col_lower in ['nro_item código', 'código', 'codigo', 'id', 'item', 'nro_item', 'wbs', 'linha']:
+        elif col_lower in ['nro_item código', 'código', 'codigo', 'id', 'item', 'wbs']:
             mapeamento_colunas[col] = "Nro_Item Código"
-        elif col_lower in ['nome do projeto', 'projeto', 'nome', 'descrição', 'descricao', 'projetos']:
+        elif col_lower in ['nome do projeto', 'projeto', 'nome', 'descrição', 'descricao']:
             mapeamento_colunas[col] = "Nome do Projeto"
             
     df_base = df_base.rename(columns=mapeamento_colunas)
 
-    # Lista de meses cronológicos esperados como colunas
+    # Lista de meses cronológicos esperados como colunas horizontais
     m_ord = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
     colunas_meses_encontradas = [m for m in m_ord if m in df_base.columns]
     colunas_identificadoras = [c for c in ["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Versão"] if c in df_base.columns]
 
     if colunas_meses_encontradas:
-        # Transforma a estrutura horizontal em vertical de banco de dados
+        # Transforma a estrutura horizontal (meses em colunas) em formato vertical de banco de dados
         df_base = pd.melt(
             df_base,
             id_vars=colunas_identificadoras,
@@ -98,28 +98,21 @@ if df_base is not None:
     else:
         st.title("📊 Gestão Estratégica de Investimentos Capex")
         st.error("⚠️ Nenhuma coluna de mês (Jan, Fev, Mar...) foi detectada no arquivo Excel.")
-        st.info(f"Cabeçalhos identificados no seu arquivo: `{list(df_base.columns)}`")
         st.stop()
 
-# --- DIAGNÓSTICO DE INCONSISTÊNCIA DE CAMPOS FIXOS ---
+# Validação final de consistência estrutural
 colunas_obrigatorias = ["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Versão", "Mês", "Val"]
-colunas_ausentes = [c for c in colunas_obrigatorias if c not in df_base.columns]
+df_base = df_base.dropna(subset=["Versão"])  # Elimina linhas totalmente nulas
 
-if colunas_ausentes:
-    st.title("📊 Gestão Estratégica de Investimentos Capex")
-    st.error(f"⚠️ A estrutura de campos fixos está inconsistente.")
-    st.markdown(f"**Campos obrigatórios que o sistema NÃO encontrou:** `{colunas_ausentes}`")
-    st.write("---")
-    st.markdown("### 🔍 Painel de Diagnóstico do seu Excel")
-    st.markdown("Veja abaixo como o Streamlit interpretou os cabeçalhos da primeira aba do seu arquivo após a limpeza automática:")
-    st.info(f"**Colunas atuais detectadas:** `{list(df_base.columns)}`")
-    st.markdown("""
-    **💡 Como corrigir rápido:**
-    1. Verifique se o nome de alguma coluna fixa no seu Excel está muito diferente (ex: em vez de 'Planta' está 'Local' ou 'Fábrica').
-    2. Se estiver, você pode simplesmente alterar o nome no seu Excel para um dos padrões aceitos ou me avisar o nome exato para eu adicionar no código acima.
-    """)
-    st.stop()
-    
+# Tratamento seguro de tipos de dados e strings
+df_base["Versão"] = df_base["Versão"].astype(str).str.strip()
+df_base["Mês"] = df_base["Mês"].astype(str).str.strip()
+df_base["Planta"] = df_base["Planta"].astype(str).str.strip()
+df_base["Área"] = df_base["Área"].astype(str).str.strip()
+
+# Conversão numérica forçada: células com texto ou vazias viram 0.0, prevenindo inflação nas somas
+df_base["Val"] = pd.to_numeric(df_base["Val"], errors='coerce').fillna(0.0)
+
 # ==========================================
 # PARTE 3: FILTROS CORPORATIVOS DINÂMICOS
 # ==========================================
@@ -150,50 +143,50 @@ areas_sel = st.sidebar.multiselect("Áreas de Negócio", areas_disponiveis, defa
 # PARTE 4: PROCESSAMENTO FINANCEIRO CORE
 # ==========================================
 
-# 1. EXPURGO DE LINHAS DE TOTAL/SUBTOTAL DO EXCEL
-# Evita duplicar os valores caso o arquivo original já venha com linhas de soma
-palavras_chave_total = ['total', 'subtotal', 'soma', 'consolidado']
-
-# Filtra o df_base removendo qualquer linha onde o Projeto ou Código contenha essas palavras
+# 1. EXPURGO CRÍTICO DE LINHAS DE TOTAIS DA PLANILHA (Previne duplicações de valores no Pandas)
+palavras_chave_total = ['total', 'subtotal', 'soma', 'consolidado', 'summary']
 df_base = df_base[
     ~df_base["Nome do Projeto"].astype(str).str.lower().str.contains('|'.join(palavras_chave_total)) &
     ~df_base["Nro_Item Código"].astype(str).str.lower().str.contains('|'.join(palavras_chave_total))
 ]
 
-# 2. APLICAÇÃO DOS FILTROS DA TELA
+# 2. FILTRAGEM DO ESCOPO SELECIONADO NA TELA (YTD + Escopo)
 df_f = df_base[
     (df_base["Mês"].isin(meses_ytd)) &
     (df_base["Planta"].isin(plantas_sel)) &
     (df_base["Área"].isin(areas_sel))
 ].copy()
 
+# Base total para análises de projetos que dependem do ano cheio
 df_analise_base = df_base[
     (df_base["Planta"].isin(plantas_sel)) &
     (df_base["Área"].isin(areas_sel))
 ].copy()
 
-# 3. IDENTIFICAÇÃO RIGOROSA DOS CENÁRIOS
+# 3. MAPEAMENTO EXATO DE CENÁRIOS TRILINGUE/FLEXÍVEL
 v_nomes = df_f["Versão"].unique()
-
-# Identifica o nome exato usado na sua coluna "Versão"
 v_b = next((v for v in v_nomes if any(x in str(v).lower() for x in ['orc', 'budg', 'prev', 'orçamento', 'orcamento'])), None)
 v_r = next((v for v in v_nomes if any(x in str(v).lower() for x in ['real', 'realizado', 'efetivado'])), None)
-v_f = next((v for v in v_nomes if any(x in str(v).lower() for x in ['fore', 'fcast', 'proj', 'forecast', 'projeção', 'projecao'])), None)
+v_f = next((v for v in v_nomes if any(x in str(v).lower() for x in ['fore', 'fcast', 'proj', 'forecast', 'projeção'])), None)
 
-# Cálculo dos montantes por cenário isolado
+# Cálculo final limpo dos KPIs macros exibidos na tela
 val_budg = df_f[df_f["Versão"] == v_b]["Val"].sum() if v_b else 0.0
 val_real = df_f[df_f["Versão"] == v_r]["Val"].sum() if v_r else 0.0
 val_fcast = df_f[df_f["Versão"] == v_f]["Val"].sum() if v_f else 0.0
 
-# --- CARD DE AUDITORIA DE DADOS (EXIBIDO APENAS SE HOUVER DIVERGÊNCIA) ---
-# Ajuda a rastrear de onde o Pandas está puxando os números
-with st.sidebar.expander("🔍 Auditoria de Valores (Validação)"):
-    st.write("**Cenários detectados na base:**", list(v_nomes))
-    st.write(f"**Identificado como Realizado:** `{v_r}`")
-    if v_r:
-        qtd_linhas_real = len(df_f[df_f["Versão"] == v_r])
-        st.write(f"**Linhas de Realizado processadas:** {qtd_linhas_real}")
-        
+# Renderização do cabeçalho principal do painel
+st.title("📊 Gestão Estratégica de Investimentos Capex")
+st.markdown(f"**Escopo:** Região América do Sul | **Período:** Jan a {m_lim} de {ano_s} *(Visão Acumulada YTD)*")
+st.write("---")
+
+# Exibição dos Cartões de KPI de Alto Nível
+col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
+with col_kpi1:
+    st.metric(label="Realizado Acumulado YTD", value=f"USD {val_real:,.2f}")
+with col_kpi2:
+    st.metric(label="Budget Original YTD", value=f"USD {val_budg:,.2f}")
+with col_kpi3:
+    st.metric(label="Forecast Projetado YTD", value=f"USD {val_fcast:,.2f}")
 
 # ==========================================
 # PARTE 5: VISUALIZAÇÕES GRÁFICAS STANDARD
