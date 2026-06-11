@@ -279,3 +279,125 @@ with st.expander("🔍 Ver Tabela de Dados Brutos"):
         st.dataframe(df_view, use_container_width=True)
     else:
         st.info("Nenhum dado bruto encontrado para os filtros selecionados.")
+# ==========================================
+# PARTE COMPLEMENTAR: EXPORTAÇÃO EXECUTIVA PDF
+# ==========================================
+st.write("---")
+st.subheader("🖨️ Exportação para Diretoria")
+st.markdown("Clique no botão abaixo para gerar a versão oficial consolidada em formato executivo para envio direto por e-mail ou apresentação.")
+
+# 1. Construção do HTML Estruturado (Padrão Corporativo A4)
+html_report = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page {{
+            size: A4;
+            margin: 18mm 15mm 20mm 15mm;
+            @top-right {{ content: "AGCO SA | CONFIDENCIAL"; font-family: Arial; font-size: 8pt; color: #888; font-weight: bold; }}
+            @bottom-right {{ content: "Página " counter(page) " de " counter(pages); font-family: Arial; font-size: 8pt; color: #888; }}
+        }}
+        body {{ font-family: Arial, sans-serif; color: #2b2b2b; margin: 0; padding: 0; line-height: 1.4; font-size: 10pt; }}
+        .header {{ border-bottom: 2px solid #a11f1f; padding-bottom: 10px; margin-bottom: 20px; }}
+        .title {{ font-size: 18pt; font-weight: bold; color: #a11f1f; text-transform: uppercase; }}
+        .subtitle {{ font-size: 11pt; color: #555; margin-top: 4px; }}
+        h2 {{ font-size: 13pt; color: #1a1a1a; margin: 20px 0 10px 0; padding-left: 8px; border-left: 4px solid #a11f1f; text-transform: uppercase; }}
+        table.kpi-table {{ width: 100%; border-collapse: separate; border-spacing: 10px 0; margin: 15px -10px; }}
+        td.kpi-card {{ width: 33.33%; background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 12px; vertical-align: top; border-left: 4px solid #a11f1f; }}
+        table.data-table {{ width: 100%; border-collapse: collapse; margin-top: 10px; }}
+        table.data-table th {{ background-color: #343a40; color: white; font-weight: bold; text-align: left; padding: 8px 10px; font-size: 9pt; border: 1px solid #343a40; text-transform: uppercase; }}
+        table.data-table td {{ padding: 7px 10px; border: 1px solid #dee2e6; font-size: 9pt; }}
+        table.data-table tr:nth-child(even) {{ background-color: #f8f9fa; }}
+        table.data-table tr.total-row {{ background-color: #e9ecef !important; font-weight: bold; }}
+        table.data-table tr.total-row td {{ border-top: 2px solid #495057; border-bottom: 2px solid #495057; }}
+        .numeric {{ text-align: right; }}
+        .negative {{ color: #c9302c; font-weight: bold; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="title">Capex - Evolução do Investimento</div>
+        <div class="subtitle">Relatório Executivo SA — Visão YTD (Jan a {m_lim}) — Ano Base {ano_s}</div>
+    </div>
+    
+    <p>Este documento apresenta a síntese dos desvios físico-financeiros consolidados e extraídos diretamente do sistema de planejamento regional.</p>
+
+    <table class="kpi-table">
+        <tr>
+            <td class="kpi-card">
+                <div style="font-size: 8pt; color: #6c757d; font-weight: bold;">REALIZADO CUMULATIVO YTD</div>
+                <div style="font-size: 14pt; font-weight: bold; color: #1a1a1a; margin-top:4px;">$ {val_real:,.2f}</div>
+            </td>
+            <td class="kpi-card" style="border-left-color: #0275d8;">
+                <div style="font-size: 8pt; color: #6c757d; font-weight: bold;">BUDGET ORIGINAL YTD</div>
+                <div style="font-size: 14pt; font-weight: bold; color: #1a1a1a; margin-top:4px;">$ {val_budg:,.2f}</div>
+            </td>
+            <td class="kpi-card" style="border-left-color: #5bc0de;">
+                <div style="font-size: 8pt; color: #6c757d; font-weight: bold;">FORECAST ATUALIZADO</div>
+                <div style="font-size: 14pt; font-weight: bold; color: #1a1a1a; margin-top:4px;">$ {val_fcast:,.2f}</div>
+            </td>
+        </tr>
+    </table>
+
+    <h2>Detalhamento do TOP 20 Projetos em Atraso</h2>
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Item Código</th>
+                <th>Nome do Projeto</th>
+                <th>Área</th>
+                <th>Planta</th>
+                <th class="numeric">Budget YTD</th>
+                <th class="numeric">Realizado YTD</th>
+                <th class="numeric">Atraso (USD)</th>
+            </tr>
+        </thead>
+        <tbody>
+"""
+
+# 2. Injeta as linhas dinâmicas filtradas do TOP 20 no relatório HTML
+if 'df_top_20' in locals() and not df_top_20.empty:
+    for _, r in df_top_20.iterrows():
+        html_report += f"""
+            <tr>
+                <td>{r['Nro_Item Código']}</td>
+                <td>{r['Nome do Projeto']}</td>
+                <td>{r['Área']}</td>
+                <td>{r['Planta']}</td>
+                <td class="numeric">$ {r['Budget YTD']:,.2f}</td>
+                <td class="numeric">$ {r['Realizado YTD']:,.2f}</td>
+                <td class="numeric negative">$ {r['Atraso (USD)']:,.2f}</td>
+            </tr>
+        """
+    # Linha final de Totais
+    html_report += f"""
+            <tr class="total-row">
+                <td>TOTAL TOP 20</td>
+                <td>---</td>
+                <td>---</td>
+                <td>---</td>
+                <td class="numeric">$ {total_b:,.2f}</td>
+                <td class="numeric">$ {total_r:,.2f}</td>
+                <td class="numeric negative">$ {total_a:,.2f}</td>
+            </tr>
+    """
+else:
+    html_report += """<tr><td colspan="7" style="text-align:center;">Nenhum desvio crítico registrado para o período.</td></tr>"""
+
+html_report += """
+        </tbody>
+    </table>
+</body>
+</html>
+"""
+
+# 3. Botão do Streamlit para download instantâneo em formato HTML (Que imprime perfeitamente como PDF no Navegador)
+st.download_button(
+    label="📥 Baixar Relatório Executivo Oficial",
+    data=html_report,
+    file_name=f"Relatorio_Executivo_Capex_{m_lim}_{ano_s}.html",
+    mime="text/html",
+    help="Gera um relatório formatado e limpo, pronto para ser salvo como PDF (Ctrl+P) ou impresso."
+)
