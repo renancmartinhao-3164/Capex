@@ -309,6 +309,9 @@ else:
 st.write("---")
 st.subheader(f"⚠️ Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD (Até {m_lim})")
 
+# String global para guardar a tabela estruturada em HTML para exportação posterior
+table_html_snippet = "<p>Sem dados de desvios analíticos para o cenário atual.</p>"
+
 if v_b and v_r and 'df_cross' in locals() and v_b in df_cross.columns and v_r in df_cross.columns:
     df_atrasados = df_cross[df_cross["Atraso (USD)"] > 0].copy()
     df_atrasados = df_atrasados.rename(columns={v_b: "Budget YTD", v_r: "Realizado YTD"})
@@ -316,6 +319,7 @@ if v_b and v_r and 'df_cross' in locals() and v_b in df_cross.columns and v_r in
     
     if df_top_20.empty:
         st.success("✅ Nenhum projeto apresenta desembolso atrasado em relação ao Budget para os filtros aplicados.")
+        table_html_snippet = "<p style='color: green; font-weight: bold;'>✅ Nenhum projeto apresenta desembolso atrasado em relação ao Budget para os filtros aplicados.</p>"
     else:
         df_exibicao = df_top_20[["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Budget YTD", "Realizado YTD", "Atraso (USD)"]].copy()
         total_b = df_top_20["Budget YTD"].sum()
@@ -328,9 +332,15 @@ if v_b and v_r and 'df_cross' in locals() and v_b in df_cross.columns and v_r in
         }])
         
         df_exibicao_com_total = pd.concat([df_exibicao, linha_total], ignore_index=True)
+        
+        # Aplica a formatação de moedas
         for col in ["Budget YTD", "Realizado YTD", "Atraso (USD)"]:
             df_exibicao_com_total[col] = df_exibicao_com_total[col].map(lambda x: f"$ {x:,.2f}")
         
+        # Transforma em estrutura HTML limpa e injeta a classe CSS
+        table_html_snippet = df_exibicao_com_total.to_html(index=False, classes='data-table')
+        
+        # Exibe no Streamlit nativamente
         st.dataframe(df_exibicao_com_total, use_container_width=True, hide_index=True)
 
 # ==========================================
@@ -368,7 +378,15 @@ try:
             h2 {{ font-size: 13pt; color: #1a1a1a; margin: 35px 0 15px 0; padding-left: 8px; border-left: 4px solid #0066cc; }}
             table.kpi-table {{ width: 100%; border-collapse: separate; border-spacing: 12px 0; margin: 15px -12px; }}
             td.kpi-card {{ width: 33.33%; background-color: #f8f9fa !important; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; border-left: 4px solid #336699 !important; }}
-            .chart-box {{ background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; margin-bottom: 30px; }}
+            .chart-box {{ background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; margin-bottom: 30px; overflow-x: auto; }}
+            
+            /* Estilização Executiva para a Tabela do TOP 20 */
+            table.data-table {{ width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 9.5pt; }}
+            table.data-table th, table.data-table td {{ border: 1px solid #e2e8f0; padding: 10px 12px; text-align: left; }}
+            table.data-table th {{ background-color: #0066cc; color: white; font-weight: bold; text-transform: uppercase; font-size: 8.5pt; letter-spacing: 0.5px; }}
+            table.data-table tr:nth-child(even) {{ background-color: #f8f9fa; }}
+            table.data-table tr:hover {{ background-color: #f1f5f9; }}
+            table.data-table tr:last-child {{ font-weight: bold; background-color: #edf2f7; border-top: 2px solid #cbd5e1; }}
         </style>
     </head>
     <body>
@@ -390,10 +408,16 @@ try:
             <div class="chart-box">{chart_p_html}</div>
             <div class="chart-box">{chart_pl_html}</div>
             <div class="chart-box">{chart_ev_html}</div>
+            
             <h2>2. Análises Avançadas de Risco e Concentração</h2>
             <div class="chart-box">{chart_scatter_html}</div>
             <div class="chart-box">{chart_run_html}</div>
             <div class="chart-box">{chart_pareto_html}</div>
+            
+            <h2>3. Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD</h2>
+            <div class="chart-box">
+                {table_html_snippet}
+            </div>
         </div>
     </body>
     </html>
@@ -410,7 +434,7 @@ except Exception as err_export:
 
 with st.expander("🔍 Ver Tabela de Dados Brutos"):
     if 'df_f' in locals() and not df_f.empty:
-        st.write("**Filtros ativos:**", f"Ano Orçamentário: {ano_s} | Período: Jan a {m_lim}")
+        st.write("**Filtros actifs:**", f"Ano Orçamentário: {ano_s} | Período: Jan a {m_lim}")
         df_view = df_f.copy()
         df_view['Val'] = df_view['Val'].map(lambda x: f"$ {x:,.2f}")
         st.dataframe(df_view, use_container_width=True)
