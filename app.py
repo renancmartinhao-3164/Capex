@@ -81,7 +81,7 @@ if df_base is not None:
             
     df_base = df_base.rename(columns=mapeamento_colunas)
 
-    # Lista de meses cronológicos esperados como colunas horizontais
+    # Lista de meses cronológicos esperados como colunas horizontais a partir da coluna O
     m_ord = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
     colunas_meses_encontradas = [m for m in m_ord if m in df_base.columns]
     colunas_identificadoras = [c for c in ["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Versão"] if c in df_base.columns]
@@ -163,13 +163,21 @@ df_analise_base = df_base[
     (df_base["Área"].isin(areas_sel))
 ].copy()
 
-# 3. MAPEAMENTO EXATO DE CENÁRIOS TRILINGUE/FLEXÍVEL
+# 3. MAPEAMENTO EXATO E DE PARIDADE COM OS CENÁRIOS CORPORATIVOS
 v_nomes = df_f["Versão"].unique()
-v_b = next((v for v in v_nomes if any(x in str(v).lower() for x in ['orc', 'budg', 'prev', 'orçamento', 'orcamento'])), None)
-v_r = next((v for v in v_nomes if any(x in str(v).lower() for x in ['real', 'realizado', 'efetivado'])), None)
-v_f = next((v for v in v_nomes if any(x in str(v).lower() for x in ['fore', 'fcast', 'proj', 'forecast', 'projeção'])), None)
 
-# Cálculo final limpo dos KPIs macros exibidos na tela
+# Identificação precisa baseada na sua nomenclatura real
+v_b = next((v for v in v_nomes if any(x in str(v).lower() for x in ['budget', 'orcamento', 'orçamento', 'previsto'])), None)
+if not v_b:
+    v_b = next((v for v in v_nomes if 'orc' in str(v).lower() or 'bud' in str(v).lower()), None)
+
+# Força o Realizado a ignorar sumariamente qualquer menção que contenha a palavra "cast" (Fcast 2+10)
+v_r = next((v for v in v_nomes if any(x in str(v).lower() for x in ['real', 'realizado', 'efetivado']) and 'cast' not in str(v).lower()), None)
+
+# Captura o cenário de Projeções (Fcast 2+10) com precisão
+v_f = next((v for v in v_nomes if any(x in str(v).lower() for x in ['fcast', 'fore', 'forecast', 'proj'])), None)
+
+# Cálculo final limpo dos KPIs macros exibidos na tela (sem sobreposição)
 val_budg = df_f[df_f["Versão"] == v_b]["Val"].sum() if v_b else 0.0
 val_real = df_f[df_f["Versão"] == v_r]["Val"].sum() if v_r else 0.0
 val_fcast = df_f[df_f["Versão"] == v_f]["Val"].sum() if v_f else 0.0
