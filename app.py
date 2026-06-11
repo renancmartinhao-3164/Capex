@@ -91,7 +91,6 @@ if df_base is not None:
             
     df_base = df_base.rename(columns=mapeamento_colunas)
 
-    # Cria colunas caso não existam no Excel para evitar quebras de compilação
     if "Responsável" not in df_base.columns:
         df_base["Responsável"] = "Não Informado"
     if "Status" not in df_base.columns:
@@ -154,7 +153,6 @@ areas_sel = st.sidebar.multiselect("Áreas de Negócio", areas_disponiveis, defa
 # ==========================================
 # PARTE 4: PROCESSAMENTO FINANCEIRO CORE
 # ==========================================
-
 palavras_chave_total = ['total', 'subtotal', 'soma', 'consolidado', 'summary']
 df_base = df_base[
     ~df_base["Nome do Projeto"].astype(str).str.lower().str.contains('|'.join(palavras_chave_total)) &
@@ -195,15 +193,36 @@ val_budg = df_f[df_f["Versão"] == v_b]["Val"].sum() if v_b else 0.0
 val_fcast = df_f[df_f["Versão"] == v_f]["Val"].sum() if v_f else 0.0
 val_real = df_f[df_f["Versão"] == v_r]["Val"].sum() if v_r else 0.0
 
-# --- CÁLCULO DAS VARIAÇÕES (REALIZADO VS BASES) ---
+# --- CÁLCULO DAS VARIAÇÕES ---
 var_budg_usd = val_real - val_budg
 pct_budg = (var_budg_usd / val_budg * 100) if val_budg > 0 else 0.0
 
 var_fcast_usd = val_real - val_fcast
 pct_fcast = (var_fcast_usd / val_fcast * 100) if val_fcast > 0 else 0.0
 
-col_logo_header, col_title_header = st.columns([1, 6])
+# --- REGRAS DE NEGÓCIO DE SOMBREAMENTO CONDICIONAL E SETAS ---
+# Regra para o Budget Card
+if var_budg_usd < 0:
+    bg_card_b = "#fce8e6"      # Sombreamento Vermelho Claro
+    cor_texto_b = "#dc3545"    # Texto Vermelho
+    seta_b = "↓"               # Seta para baixo
+else:
+    bg_card_b = "#e6f4ea"      # Sombreamento Verde Claro
+    cor_texto_b = "#28a745"    # Texto Verde
+    seta_b = "↑"               # Seta para cima
 
+# Regra para o Forecast Card
+if var_fcast_usd < 0:
+    bg_card_f = "#fce8e6"      # Sombreamento Vermelho Claro
+    cor_texto_f = "#dc3545"    # Texto Vermelho
+    seta_f = "↓"               # Seta para baixo
+else:
+    bg_card_f = "#e6f4ea"      # Sombreamento Verde Claro
+    cor_texto_f = "#28a745"    # Texto Verde
+    seta_f = "↑"               # Seta para cima
+
+
+col_logo_header, col_title_header = st.columns([1, 6])
 with col_logo_header:
     if os.path.exists(ARQUIVO_LOGO):
         st.image(ARQUIVO_LOGO, width=120)
@@ -216,27 +235,39 @@ with col_title_header:
 
 st.write("---")
 
-# --- CARTOES DE MÉTRICAS COM AS VARIAÇÕES EMBUTIDAS ---
+# --- CARTOES DE MÉTRICAS EXECUTIVOS COM SOMBREAMENTO CONDICIONAL ---
 col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
+
 with col_kpi1:
-    st.metric(
-        label="Realizado Acumulado YTD", 
-        value=f"USD {val_real:,.2f}"
-    )
+    st.markdown(f"""
+        <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-left: 5px solid #336699; border-radius: 6px; padding: 16px; min-height: 100px;">
+            <div style="font-size: 10pt; color: #555555; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">Realizado Acumulado YTD</div>
+            <div style="font-size: 18pt; font-weight: bold; color: #1a1a1a; margin-top: 6px;">USD {val_real:,.2f}</div>
+            <div style="font-size: 9.5pt; color: #777777; margin-top: 4px;">Execução física/financeira ativa</div>
+        </div>
+    """, unsafe_allow_html=True)
+
 with col_kpi2:
-    st.metric(
-        label="Budget Original YTD", 
-        value=f"USD {val_budg:,.2f}",
-        delta=f"USD {var_budg_usd:,.2f} ({pct_budg:+.2f}%)",
-        delta_color="normal" # Vermelho automático se negativo (subexecução)
-    )
+    st.markdown(f"""
+        <div style="background-color: {bg_card_b}; border: 1px solid #e9ecef; border-left: 5px solid {cor_texto_b}; border-radius: 6px; padding: 16px; min-height: 100px;">
+            <div style="font-size: 10pt; color: #555555; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">Budget Original YTD</div>
+            <div style="font-size: 18pt; font-weight: bold; color: #1a1a1a; margin-top: 6px;">USD {val_budg:,.2f}</div>
+            <div style="font-size: 10pt; font-weight: bold; color: {cor_texto_b}; margin-top: 4px; display: flex; align-items: center;">
+                <span style="font-size: 12pt; margin-right: 4px;">{seta_b}</span> Var: USD {var_budg_usd:,.2f} ({pct_budg:+.2f}%)
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
 with col_kpi3:
-    st.metric(
-        label="Forecast Projetado YTD (2+10)", 
-        value=f"USD {val_fcast:,.2f}",
-        delta=f"USD {var_fcast_usd:,.2f} ({pct_fcast:+.2f}%)",
-        delta_color="normal"
-    )
+    st.markdown(f"""
+        <div style="background-color: {bg_card_f}; border: 1px solid #e9ecef; border-left: 5px solid {cor_texto_f}; border-radius: 6px; padding: 16px; min-height: 100px;">
+            <div style="font-size: 10pt; color: #555555; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">Forecast Projetado YTD (2+10)</div>
+            <div style="font-size: 18pt; font-weight: bold; color: #1a1a1a; margin-top: 6px;">USD {val_fcast:,.2f}</div>
+            <div style="font-size: 10pt; font-weight: bold; color: {cor_texto_f}; margin-top: 4px; display: flex; align-items: center;">
+                <span style="font-size: 12pt; margin-right: 4px;">{seta_f}</span> Var: USD {var_fcast_usd:,.2f} ({pct_fcast:+.2f}%)
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
 
 # ==========================================
 # PARTE 5: VISUALIZAÇÕES GRÁFICAS STANDARD (Tudo em AZUL)
@@ -244,7 +275,6 @@ with col_kpi3:
 st.write("---")
 cor_graficos = ["#0066cc"]
 
-# 1. Comparativo Geral de Versões
 st.subheader(f"📊 Comparativo Geral Capex YTD (Jan a {m_lim}) - USD")
 fig_main = px.bar(df_f.groupby("Versão")["Val"].sum().reset_index(), x="Versão", y="Val", color_discrete_sequence=cor_graficos, text_auto='.2f')
 fig_main.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
@@ -253,7 +283,6 @@ st.plotly_chart(fig_main, use_container_width=True)
 
 st.write("---")
 
-# 2. Cenários Agrupados por Área de Projeto
 st.subheader("📊 Cenários por Tipo de Categoria de Projeto (Budget vs Forecast vs Realizado)")
 df_proj_ver = df_f.groupby(["Área", "Versão"])["Val"].sum().reset_index()
 fig_p = px.bar(df_proj_ver, x="Área", y="Val", color="Versão", barmode="group", text_auto='.2f', color_discrete_sequence=px.colors.qualitative.Plotly_r)
@@ -263,7 +292,6 @@ st.plotly_chart(fig_p, use_container_width=True)
     
 st.write("---")
 
-# 3. Distribuição Volumétrica por Planta
 st.subheader("🏢 Distribuição Total de Recursos por Site (Plantas)")
 fig_pl = px.bar(df_f.groupby("Planta")["Val"].sum().reset_index().sort_values("Val", ascending=False), x="Planta", y="Val", color_discrete_sequence=cor_graficos, text_auto='.2f')
 fig_pl.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
@@ -272,7 +300,6 @@ st.plotly_chart(fig_pl, use_container_width=True)
 
 st.write("---")
 
-# 4. Evolução Temporal Mensal
 st.subheader("📈 Evolução Mensal Temporal dos Desembolsos")
 df_ev = df_f.groupby(["Mês", "Versão"])["Val"].sum().reset_index()
 df_ev['Idx'] = df_ev['Mês'].map({m: i for i, m in enumerate(m_ord)})
@@ -341,12 +368,10 @@ else:
 # =========================================================
 st.write("---")
 
-# Definição de placeholders para injeção HTML estruturada
 table_html_snippet_budget = "<p>Sem dados de desvios de Budget para o cenário atual.</p>"
 table_html_snippet_forecast = "<p>Sem dados de desvios de Forecast para o cenário atual.</p>"
 
 if v_b and v_r and 'df_cross' in locals() and v_b in df_cross.columns and v_r in df_cross.columns:
-    # --- TABELA 1: TOP 20 VS BUDGET ---
     df_atrasados_b = df_cross[df_cross[v_b] - df_cross[v_r] > 0].copy()
     df_atrasados_b["Atraso (USD)"] = df_atrasados_b[v_b] - df_atrasados_b[v_r]
     df_atrasados_b = df_atrasados_b.rename(columns={v_b: "Budget YTD", v_r: "Realizado YTD"})
@@ -375,7 +400,6 @@ if v_b and v_r and 'df_cross' in locals() and v_b in df_cross.columns and v_r in
         st.dataframe(df_exibicao_com_total_b, use_container_width=True, hide_index=True)
 
 if v_f and v_r and 'df_cross' in locals() and v_f in df_cross.columns and v_r in df_cross.columns:
-    # --- TABELA 2: TOP 20 VS FORECAST ---
     df_atrasados_f = df_cross[df_cross[v_f] - df_cross[v_r] > 0].copy()
     df_atrasados_f["Atraso vs Fcast (USD)"] = df_atrasados_f[v_f] - df_atrasados_f[v_r]
     df_atrasados_f = df_atrasados_f.rename(columns={v_f: "Forecast YTD", v_r: "Realizado YTD"})
@@ -405,7 +429,7 @@ if v_f and v_r and 'df_cross' in locals() and v_f in df_cross.columns and v_r in
         st.dataframe(df_exibicao_com_total_f, use_container_width=True, hide_index=True)
 
 # ==========================================
-# PARTE 8: EXPORTAÇÃO EXECUTIVA (HTML) com LOGO e Paleta Azul
+# PARTE 8: EXPORTAÇÃO EXECUTIVA (HTML)
 # ==========================================
 st.write("---")
 st.subheader("🖨️ Exportação Completa para Diretoria")
@@ -424,10 +448,6 @@ try:
     if os.path.exists(ARQUIVO_LOGO):
         logo_base64_html = f'<img src="data:image/jpeg;base64,{get_base64_of_bin_file(ARQUIVO_LOGO)}" style="height:50px;float:left;margin-right:20px;margin-top:-10px;">'
 
-    # Estilização dinâmica das cores de variação no HTML
-    cor_html_b = "#dc3545" if var_budg_usd < 0 else "#28a745"
-    cor_html_f = "#dc3545" if var_fcast_usd < 0 else "#28a745"
-
     html_report = f"""
     <!DOCTYPE html>
     <html lang="pt-BR">
@@ -442,10 +462,9 @@ try:
             .title {{ font-size: 20pt; font-weight: bold; color: #0066cc; text-transform: uppercase; }}
             h2 {{ font-size: 13pt; color: #1a1a1a; margin: 35px 0 15px 0; padding-left: 8px; border-left: 4px solid #0066cc; }}
             table.kpi-table {{ width: 100%; border-collapse: separate; border-spacing: 12px 0; margin: 15px -12px; }}
-            td.kpi-card {{ width: 33.33%; background-color: #f8f9fa !important; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; border-left: 4px solid #336699 !important; }}
+            td.kpi-card {{ width: 33.33%; background-color: #f8f9fa !important; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; border-left: 5px solid #336699 !important; }}
             .chart-box {{ background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; margin-bottom: 30px; overflow-x: auto; }}
             
-            /* Estilização Executiva para as Tabelas */
             table.data-table {{ width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 9pt; }}
             table.data-table th, table.data-table td {{ border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; }}
             table.data-table th {{ background-color: #0066cc; color: white; font-weight: bold; text-transform: uppercase; font-size: 8pt; letter-spacing: 0.5px; }}
@@ -464,15 +483,15 @@ try:
             <table class="kpi-table">
                 <tr>
                     <td class="kpi-card"><div>REALIZADO YTD</div><div style="font-size:14pt;font-weight:bold;">$ {val_real:,.2f}</div></td>
-                    <td class="kpi-card" style="border-left-color: #0066cc !important;">
+                    <td class="kpi-card" style="background-color: {bg_card_b} !important; border-left-color: {cor_texto_b} !important;">
                         <div>BUDGET YTD</div>
                         <div style="font-size:14pt;font-weight:bold;">$ {val_budg:,.2f}</div>
-                        <div style="font-size:9.5pt; font-weight:bold; color:{cor_html_b}; margin-top:4px;">Var: $ {var_budg_usd:,.2f} ({pct_budg:+.2f}%)</div>
+                        <div style="font-size:9.5pt; font-weight:bold; color:{cor_texto_b}; margin-top:4px;">{seta_b} Var: $ {var_budg_usd:,.2f} ({pct_budg:+.2f}%)</div>
                     </td>
-                    <td class="kpi-card" style="border-left-color: #3b7aae !important;">
+                    <td class="kpi-card" style="background-color: {bg_card_f} !important; border-left-color: {cor_texto_f} !important;">
                         <div>FORECAST (2+10)</div>
                         <div style="font-size:14pt;font-weight:bold;">$ {val_fcast:,.2f}</div>
-                        <div style="font-size:9.5pt; font-weight:bold; color:{cor_html_f}; margin-top:4px;">Var: $ {var_fcast_usd:,.2f} ({pct_fcast:+.2f}%)</div>
+                        <div style="font-size:9.5pt; font-weight:bold; color:{cor_texto_f}; margin-top:4px;">{seta_f} Var: $ {var_fcast_usd:,.2f} ({pct_fcast:+.2f}%)</div>
                     </td>
                 </tr>
             </table>
@@ -488,14 +507,10 @@ try:
             <div class="chart-box">{chart_pareto_html}</div>
             
             <h2>3. Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD vs. Budget</h2>
-            <div class="chart-box">
-                {table_html_snippet_budget}
-            </div>
+            <div class="chart-box">{table_html_snippet_budget}</div>
 
             <h2>4. Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD vs. Fcast 2+10</h2>
-            <div class="chart-box">
-                {table_html_snippet_forecast}
-            </div>
+            <div class="chart-box">{table_html_snippet_forecast}</div>
         </div>
     </body>
     </html>
