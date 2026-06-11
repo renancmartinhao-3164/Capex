@@ -174,21 +174,19 @@ else:
     with kpi3:
         txt_delta_f = f"{pct_vs_fcast:.1f}% do Forecast" if val_fcast > 0 else "Forecast não selecionado"
         st.markdown(f"<div style='background-color:#f8f9fa; padding:15px; border-radius:10px; border-left:5px solid #7cb9e8;'><p style='margin:0; font-size:14px; color:#555; font-weight:bold;'>Realizado vs Forecast</p><h2 style='margin:5px 0 0 0; color:#3b7aae;'>{txt_delta_f}</h2><p style='margin:0; font-size:12px; color:#777;'>Total original: $ {val_fcast:,.2f}</p></div>", unsafe_allow_html=True)
-
-
 # ==========================================
-# PARTE 4: LAYOUT VERTICAL E ANÁLISE TOP 20
+# PARTE 4: LAYOUT VERTICAL E ANÁLISE TOP 20 (ATUALIZADA)
 # ==========================================
     st.write("---")
     
     # Cor padrão para manter a identidade visual nos gráficos e no PDF
-    cor_graficos = ["#a11f1f"]  # Vermelho corporativo (ou troque por "#0066cc" para azul)
+    cor_graficos = ["#a11f1f"]  # Vermelho corporativo
     
     # 1. Comparativo Geral
     st.subheader(f"📊 Comparativo Geral Capex YTD (Jan a {m_lim}) - USD")
     fig_main = px.bar(df_f.groupby("Versão")["Val"].sum().reset_index(), x="Versão", y="Val", color_discrete_sequence=cor_graficos, text_auto='.2f')
     fig_main.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
-    fig_main.update_layout(yaxis_tickformat='$', height=450, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+    fig_main.update_layout(yaxis_tickformat='$', height=400, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
     st.plotly_chart(fig_main, use_container_width=True)
 
     st.write("---")
@@ -198,7 +196,7 @@ else:
     df_proj_ver = df_f.groupby(["Projeto", "Versão"])["Val"].sum().reset_index()
     fig_p = px.bar(df_proj_ver, x="Projeto", y="Val", color="Versão", barmode="group", text_auto='.2f')
     fig_p.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
-    fig_p.update_layout(yaxis_tickformat='$', xaxis_title="Tipo de Projeto", legend_title="Cenário", xaxis={'categoryorder':'total descending'}, height=480, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+    fig_p.update_layout(yaxis_tickformat='$', xaxis_title="Tipo de Projeto", legend_title="Cenário", xaxis={'categoryorder':'total descending'}, height=450, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
     st.plotly_chart(fig_p, use_container_width=True)
         
     st.write("---")
@@ -207,7 +205,7 @@ else:
     st.subheader("🏢 Distribuição Total por Site")
     fig_pl = px.bar(df_f.groupby("Planta")["Val"].sum().reset_index().sort_values("Val", ascending=False), x="Planta", y="Val", color_discrete_sequence=cor_graficos, text_auto='.2f')
     fig_pl.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
-    fig_pl.update_layout(yaxis_tickformat='$', showlegend=False, xaxis_title="Site", height=450, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+    fig_pl.update_layout(yaxis_tickformat='$', showlegend=False, xaxis_title="Site", height=400, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
     st.plotly_chart(fig_pl, use_container_width=True)
 
     st.write("---")
@@ -221,212 +219,183 @@ else:
     
     fig_ev = px.line(df_ev_sorted, x="Mês", y="Val", color="Versão", markers=True, text="Label_Txt")
     fig_ev.update_traces(textposition='top center')
-    fig_ev.update_layout(yaxis_tickformat='$', height=450, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+    fig_ev.update_layout(yaxis_tickformat='$', height=400, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
     st.plotly_chart(fig_ev, use_container_width=True)
 
-    # 5. TABELA ANALÍTICA DE ATRASOS
-    st.write("---")
-    st.subheader(f"⚠️ Análise de Desvios: TOP 20 Projetos em Atraso no Desembolso YTD (Até {m_lim})")
-    st.markdown("A tabela abaixo rastreia os desvios utilizando a chave **Nro_Item Código** combinada com o **Nome do Projeto (Coluna I)**.")
 
+    # =========================================================
+    # NOVAS PROPOSTAS ESTRATÉGICAS (MATRIZ, PREVISÃO E PARETO)
+    # =========================================================
+    st.write("---")
+    
+    # Preparação de dados cruzados para as novas visões
     v_nomes = df_analise_base["Versão"].unique()
     v_b = next((v for v in v_nomes if any(x in str(v).lower() for x in ['orc', 'budg', 'prev'])), None)
     v_r = next((v for v in v_nomes if 'real' in str(v).lower()), None)
 
-    if not v_b or not v_r:
-        st.info("ℹ️ Certifique-se de possuir dados de 'Budget' e 'Realizado' para calcular os desvios.")
-    else:
-        df_pivot_itens = df_analise_base.groupby(["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Versão"])["Val"].sum().unstack(level="Versão").fillna(0).reset_index()
+    if v_b and v_r:
+        df_cross = df_analise_base.groupby(["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Versão"])["Val"].sum().unstack(level="Versão").fillna(0).reset_index()
+        df_cross["Atraso (USD)"] = df_cross[v_b] - df_cross[v_r]
+        df_cross["Atingimento %"] = (df_cross[v_r] / df_cross[v_b] * 100).fillna(0).clip(0, 200)
         
-        if v_b in df_pivot_itens.columns and v_r in df_pivot_itens.columns:
-            df_pivot_itens["Atraso (USD)"] = df_pivot_itens[v_b] - df_pivot_itens[v_r]
-            df_atrasados = df_pivot_itens[df_pivot_itens["Atraso (USD)"] > 0].copy()
-            
-            df_atrasados = df_atrasados.rename(columns={v_b: "Budget YTD", v_r: "Realizado YTD"})
-            df_top_20 = df_atrasados.sort_values(by="Atraso (USD)", ascending=False).head(20)
-            
-            if df_top_20.empty:
-                st.success("✅ Nenhum projeto apresenta desembolso atrasado em relação ao Budget para os filtros aplicados.")
-            else:
-                df_exibicao = df_top_20[["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Budget YTD", "Realizado YTD", "Atraso (USD)"]].copy()
-                
-                total_b = df_top_20["Budget YTD"].sum()
-                total_r = df_top_20["Realizado YTD"].sum()
-                total_a = df_top_20["Atraso (USD)"].sum()
-                
-                linha_total = pd.DataFrame([{
-                    "Nro_Item Código": "TOTAL DO TOP 20",
-                    "Nome do Projeto": "---",
-                    "Área": "---",
-                    "Planta": "---",
-                    "Budget YTD": total_b,
-                    "Realizado YTD": total_r,
-                    "Atraso (USD)": total_a
-                }])
-                
-                df_exibicao_com_total = pd.concat([df_exibicao, linha_total], ignore_index=True)
-                
-                for col in ["Budget YTD", "Realizado YTD", "Atraso (USD)"]:
-                    df_exibicao_com_total[col] = df_exibicao_com_total[col].map(lambda x: f"$ {x:,.2f}")
-                
-                st.dataframe(df_exibicao_com_total, use_container_width=True, hide_index=True)
+        # PROPOSTA 1: Matriz de Criticidade (Scatter Plot)
+        st.subheader("🎯 Proposta 1: Matriz de Criticidade (Projetos Críticos)")
+        st.markdown("O quadrante **superior direito** isola de forma visual imediata as iniciativas de **alto valor e com maior desvio orçamentário**.")
+        
+        fig_scatter = px.scatter(
+            df_cross[df_cross[v_b] > 0], 
+            x=v_b, y="Atraso (USD)", 
+            size=v_b, color="Área",
+            hover_name="Nome do Projeto",
+            labels={v_b: "Orçamento Planejado (USD)", "Atraso (USD)": "Desvio / Atraso Cumulativo (USD)"},
+            height=450
+        )
+        fig_scatter.update_layout(plot_bgcolor='#f8f9fa', paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_scatter, use_container_width=True)
+        st.write("---")
+
+        # PROPOSTA 2: Tendência de Fechamento (Run Rate Projeção)
+        st.subheader("🔮 Proposta 2: Análise Preditiva de Tendência (Run Rate)")
+        n_meses_ytd = m_ord.index(m_lim) + 1
+        gasto_medio_mensal = val_real / n_meses_ytd
+        proj_fim_ano = val_real + (gasto_medio_mensal * (12 - n_meses_ytd))
+        
+        df_runrate = pd.DataFrame({
+            "Métrica": ["Realizado YTD", "Projeção Final de Ano (Run Rate)", "Budget Anual Total"],
+            "Valor": [val_real, proj_fim_ano, val_budg]
+        })
+        fig_run = px.bar(df_runrate, x="Métrica", y="Valor", text_auto='.2f', color="Métrica", color_discrete_sequence=["#ff2a2a", "#3b7aae", "#343a40"])
+        fig_run.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
+        fig_run.update_layout(yaxis_tickformat='$', showlegend=False, height=400, plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_run, use_container_width=True)
+        st.write("---")
+
+        # PROPOSTA 3: Princípio de Pareto (Concentração do Orçamento)
+        st.subheader("📊 Proposta 3: Curva de Pareto de Projetos")
+        st.markdown("Identificação visual dos grandes blocos de investimento (Regra dos 80/20).")
+        
+        df_pareto = df_cross.groupby("Nome do Projeto")[v_b].sum().reset_index().sort_values(by=v_b, ascending=False)
+        df_pareto["% Acumulado"] = (df_pareto[v_b].cumsum() / df_pareto[v_b].sum() * 100)
+        
+        fig_pareto = px.bar(df_pareto.head(15), x="Nome do Projeto", y=v_b, text_auto='.2f', color_discrete_sequence=cor_graficos)
+        fig_pareto.update_traces(texttemplate='$%{y:,.0f}', textposition='outside')
+        fig_pareto.update_layout(yaxis_tickformat='$', height=450, xaxis_tickangle=-45, plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_pareto, use_container_width=True)
+    else:
+        fig_scatter, fig_run, fig_pareto = None, None, None
+
+
+    # 5. TABELA ANALÍTICA DE ATRASOS
+    st.write("---")
+    st.subheader(f"⚠️ Análise de Desvios: TOP 20 Projetos em Atraso no Desembolso YTD (Até {m_lim})")
+    
+    if v_b and v_r and v_b in df_cross.columns:
+        df_atrasados = df_cross[df_cross["Atraso (USD)"] > 0].copy()
+        df_atrasados = df_atrasados.rename(columns={v_b: "Budget YTD", v_r: "Realizado YTD"})
+        df_top_20 = df_atrasados.sort_values(by="Atraso (USD)", ascending=False).head(20)
+        
+        if df_top_20.empty:
+            st.success("✅ Nenhum projeto apresenta desembolso atrasado em relação ao Budget para os filtros aplicados.")
         else:
-            st.warning("⚠️ Colunas de cenários insuficientes para o cruzamento de dados.")
+            df_exibicao = df_top_20[["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Budget YTD", "Realizado YTD", "Atraso (USD)"]].copy()
+            total_b = df_top_20["Budget YTD"].sum()
+            total_r = df_top_20["Realizado YTD"].sum()
+            total_a = df_top_20["Atraso (USD)"].sum()
+            
+            linha_total = pd.DataFrame([{
+                "Nro_Item Código": "TOTAL DO TOP 20", "Nome do Projeto": "---", "Área": "---", "Planta": "---",
+                "Budget YTD": total_b, "Realizado YTD": total_r, "Atraso (USD)": total_a
+            }])
+            
+            df_exibicao_com_total = pd.concat([df_exibicao, linha_total], ignore_index=True)
+            for col in ["Budget YTD", "Realizado YTD", "Atraso (USD)"]:
+                df_exibicao_com_total[col] = df_exibicao_com_total[col].map(lambda x: f"$ {x:,.2f}")
+            
+            st.dataframe(df_exibicao_com_total, use_container_width=True, hide_index=True)
 
 
 # ==========================================
-# PARTE COMPLEMENTAR: EXPORTAÇÃO EXECUTIVA CORRIGIDA
+# PARTE COMPLEMENTAR: EXPORTAÇÃO EXECUTIVA AMPLIADA
 # ==========================================
 st.write("---")
 st.subheader("🖨️ Exportação Completa para Diretoria")
-st.markdown("Clique no botão abaixo para gerar a versão oficial consolidada com **KPIs, Gráficos Coloridos e Tabelas**.")
+st.markdown("Clique no botão abaixo para gerar o report consolidado completo contendo todas as novas visões e gráficos coloridos.")
 
 try:
-    # Forçar a renderização com cores explícitas antes de converter para o HTML de exportação
-    fig_main.update_layout(colorway=cor_graficos)
-    fig_pl.update_layout(colorway=cor_graficos)
-    
     chart_main_html = fig_main.to_html(full_html=False, include_plotlyjs='cdn')
     chart_p_html = fig_p.to_html(full_html=False, include_plotlyjs='cdn')
     chart_pl_html = fig_pl.to_html(full_html=False, include_plotlyjs='cdn')
     chart_ev_html = fig_ev.to_html(full_html=False, include_plotlyjs='cdn')
+    
+    # Inclusão segura dos novos gráficos no PDF caso existam dados válidos
+    chart_scatter_html = fig_scatter.to_html(full_html=False, include_plotlyjs='cdn') if fig_scatter else ""
+    chart_run_html = fig_run.to_html(full_html=False, include_plotlyjs='cdn') if fig_run else ""
+    chart_pareto_html = fig_pareto.to_html(full_html=False, include_plotlyjs='cdn') if fig_pareto else ""
 
     html_report = f"""
     <!DOCTYPE html>
     <html lang="pt-BR">
     <head>
         <meta charset="UTF-8">
-        <title>Relatório de Investimentos Capex</title>
         <style>
-            /* IMPORTANTE: Forçar o navegador a imprimir cores de fundo e gráficos */
-            * {{
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-            }}
-            @media print {{
-                .no-print {{ display: none; }}
-                body {{ background: #fff; color: #000; padding: 0; }}
-                .report-wrapper {{ border: none !important; box-shadow: none !important; padding: 0 !important; max-width: 100% !important; }}
-            }}
-            @page {{
-                size: A4;
-                margin: 20mm 15mm 20mm 15mm;
-            }}
-            body {{
-                font-family: 'Segoe UI', Arial, sans-serif;
-                color: #2b2b2b;
-                margin: 0;
-                padding: 20px;
-                line-height: 1.4;
-                background-color: #fafafa;
-            }}
-            .report-wrapper {{
-                max-width: 900px;
-                margin: 0 auto;
-                background: #fff;
-                padding: 40px;
-                border: 1px solid #e0e0e0;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            }}
-            .header {{
-                border-bottom: 3px solid #a11f1f;
-                padding-bottom: 12px;
-                margin-bottom: 25px;
-            }}
-            .title {{ font-size: 20pt; font-weight: bold; color: #a11f1f; text-transform: uppercase; letter-spacing: 0.5px; }}
-            .subtitle {{ font-size: 11pt; color: #555; margin-top: 5px; font-weight: 500; }}
-            .meta-date {{ font-size: 9pt; color: #888; font-style: italic; margin-top: 2px; }}
-            
-            h2 {{
-                font-size: 13pt;
-                color: #1a1a1a;
-                margin: 35px 0 15px 0;
-                padding-left: 8px;
-                border-left: 4px solid #a11f1f;
-                text-transform: uppercase;
-                page-break-after: avoid;
-            }}
-            
-            p {{ margin: 0 0 12px 0; color: #444; text-align: justify; font-size: 10pt; }}
-            
+            * {{ -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }}
+            @media print {{ body {{ background: #fff; }} .report-wrapper {{ border: none !important; box-shadow: none !important; padding: 0 !important; }} }}
+            @page {{ size: A4; margin: 20mm 15mm 20mm 15mm; }}
+            body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #2b2b2b; margin: 0; padding: 20px; background-color: #fafafa; }}
+            .report-wrapper {{ max-width: 900px; margin: 0 auto; background: #fff; padding: 40px; border: 1px solid #e0e0e0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }}
+            .header {{ border-bottom: 3px solid #a11f1f; padding-bottom: 12px; margin-bottom: 25px; }}
+            .title {{ font-size: 20pt; font-weight: bold; color: #a11f1f; text-transform: uppercase; }}
+            .subtitle {{ font-size: 11pt; color: #555; margin-top: 5px; }}
+            h2 {{ font-size: 13pt; color: #1a1a1a; margin: 35px 0 15px 0; padding-left: 8px; border-left: 4px solid #a11f1f; text-transform: uppercase; page-break-after: avoid; }}
+            p {{ font-size: 10pt; color: #444; margin-bottom: 12px; }}
             table.kpi-table {{ width: 100%; border-collapse: separate; border-spacing: 12px 0; margin: 15px -12px; }}
-            td.kpi-card {{ width: 33.33%; background-color: #f8f9fa !important; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; vertical-align: top; border-left: 4px solid #a11f1f !important; }}
-            .kpi-label {{ font-size: 8pt; color: #6c757d; font-weight: bold; text-transform: uppercase; }}
-            .kpi-value {{ font-size: 15pt; font-weight: bold; color: #1a1a1a; margin-top: 4px; }}
-            
-            .chart-box {{
-                background: #ffffff;
-                border: 1px solid #e2e8f0;
-                border-radius: 6px;
-                padding: 15px;
-                margin-bottom: 30px;
-                page-break-inside: avoid;
-            }}
-            
-            table.data-table {{ width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 20px; page-break-inside: avoid; }}
-            table.data-table th {{ background-color: #343a40 !important; color: white !important; font-weight: bold; text-align: left; padding: 9px 10px; font-size: 9pt; border: 1px solid #343a40; text-transform: uppercase; }}
+            td.kpi-card {{ width: 33.33%; background-color: #f8f9fa !important; border: 1px solid #e9ecef; padding: 14px; border-left: 4px solid #a11f1f !important; }}
+            .chart-box {{ background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; margin-bottom: 30px; page-break-inside: avoid; }}
+            table.data-table {{ width: 100%; border-collapse: collapse; margin-top: 15px; page-break-inside: avoid; }}
+            table.data-table th {{ background-color: #343a40 !important; color: white !important; padding: 9px 10px; font-size: 9pt; text-transform: uppercase; }}
             table.data-table td {{ padding: 8px 10px; border: 1px solid #dee2e6; font-size: 9pt; }}
             table.data-table tr:nth-child(even) {{ background-color: #f8f9fa !important; }}
             table.data-table tr.total-row {{ background-color: #e9ecef !important; font-weight: bold; }}
-            table.data-table tr.total-row td {{ border-top: 2px solid #495057; border-bottom: 2px solid #495057; color: #000; }}
             .numeric {{ text-align: right; }}
             .negative {{ color: #c9302c; font-weight: bold; }}
-            
-            .footer-notice {{ margin-top: 40px; font-size: 8pt; color: #999; text-align: center; border-top: 1px solid #eee; padding-top: 15px; }}
         </style>
     </head>
     <body>
         <div class="report-wrapper">
             <div class="header">
-                <div class="title">Capex - Evolução do Investimento</div>
-                <div class="subtitle">Relatório Executivo Regional — Manufatura América do Sul</div>
-                <div class="meta-date">Filtros Aplicados: Ano Base {ano_s} | Visão YTD Acumulada até {m_lim}</div>
+                <div class="title">Capex - Status Corporativo Global</div>
+                <div class="subtitle">Book Executivo Consolidado — América do Sul — Ano {ano_s} (YTD até {m_lim})</div>
             </div>
-            
-            <p>Este report consolidado reflete o status oficial de investimentos da região, sumarizando a performance financeira corporativa e os desvios de desembolsos mapeados no período.</p>
 
             <table class="kpi-table">
                 <tr>
-                    <td class="kpi-card">
-                        <div class="kpi-label">Realizado Cumulativo YTD</div>
-                        <div class="kpi-value">$ {val_real:,.2f}</div>
-                    </td>
-                    <td class="kpi-card" style="border-left-color: #0066cc !important;">
-                        <div class="kpi-label">Budget Original YTD</div>
-                        <div class="kpi-value">$ {val_budg:,.2f}</div>
-                    </td>
-                    <td class="kpi-card" style="border-left-color: #3b7aae !important;">
-                        <div class="kpi-label">Forecast Projetado (2+10)</div>
-                        <div class="kpi-value">$ {val_fcast:,.2f}</div>
-                    </td>
+                    <td class="kpi-card"><div style="font-size:8pt;color:#6c757d;">REALIZADO YTD</div><div style="font-size:14pt;font-weight:bold;">$ {val_real:,.2f}</div></td>
+                    <td class="kpi-card" style="border-left-color: #0066cc !important;"><div style="font-size:8pt;color:#6c757d;">BUDGET YTD</div><div style="font-size:14pt;font-weight:bold;">$ {val_budg:,.2f}</div></td>
+                    <td class="kpi-card" style="border-left-color: #3b7aae !important;"><div style="font-size:8pt;color:#6c757d;">FORECAST (2+10)</div><div style="font-size:14pt;font-weight:bold;">$ {val_fcast:,.2f}</div></td>
                 </tr>
             </table>
 
-            <h2>1. Comparativo Geral Capex YTD - Visão Consolidada</h2>
+            <h2>1. Evolução e Sumário por Estruturas e Sites</h2>
             <div class="chart-box">{chart_main_html}</div>
-
-            <h2>2. Cenários por Tipo de Categoria de Projeto</h2>
             <div class="chart-box">{chart_p_html}</div>
-
-            <h2>3. Distribuição Total de Recursos por Site (Plantas)</h2>
             <div class="chart-box">{chart_pl_html}</div>
-
-            <h2>4. Evolução Temporal Mensal dos Desembolsos</h2>
             <div class="chart-box">{chart_ev_html}</div>
 
-            <h2>5. Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD</h2>
-            <p>Iniciativas que registram maior diferimento físico-financeiro acumulado em relação às metas originais estabelecidas no Budget.</p>
-            
+            <h2>2. Matriz de Alocação e Criticidade de Desvios</h2>
+            <div class="chart-box">{chart_scatter_html}</div>
+
+            <h2>3. Análise Preditiva de Fechamento (Run Rate Anual)</h2>
+            <div class="chart-box">{chart_run_html}</div>
+
+            <h2>4. Concentração de Linhas de Investimento (Pareto Top 15)</h2>
+            <div class="chart-box">{chart_pareto_html}</div>
+
+            <h2>5. Análise Mapeada de Desvios Críticos: TOP 20 Projetos</h2>
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th>Item Código</th>
-                        <th>Nome do Projeto</th>
-                        <th>Área</th>
-                        <th>Planta</th>
-                        <th class="numeric">Budget YTD</th>
-                        <th class="numeric">Realizado YTD</th>
-                        <th class="numeric">Atraso (USD)</th>
+                        <th>Item</th><th>Nome do Projeto</th><th>Área</th><th>Planta</th>
+                        <th class="numeric">Budget YTD</th><th class="numeric">Realizado YTD</th><th class="numeric">Atraso</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -436,56 +405,39 @@ try:
         for _, r in df_top_20.iterrows():
             html_report += f"""
                 <tr>
-                    <td>{r['Nro_Item Código']}</td>
-                    <td>{r['Nome do Projeto']}</td>
-                    <td>{r['Área']}</td>
-                    <td>{r['Planta']}</td>
-                    <td class="numeric">$ {r['Budget YTD']:,.2f}</td>
-                    <td class="numeric">$ {r['Realizado YTD']:,.2f}</td>
+                    <td>{r['Nro_Item Código']}</td><td>{r['Nome do Projeto']}</td><td>{r['Área']}</td><td>{r['Planta']}</td>
+                    <td class="numeric">$ {r['Budget YTD']:,.2f}</td><td class="numeric">$ {r['Realizado YTD']:,.2f}</td>
                     <td class="numeric negative">$ {r['Atraso (USD)']:,.2f}</td>
                 </tr>
             """
         html_report += f"""
                 <tr class="total-row">
-                    <td>TOTAL TOP 20</td>
-                    <td>---</td>
-                    <td>---</td>
-                    <td>---</td>
-                    <td class="numeric">$ {total_b:,.2f}</td>
-                    <td class="numeric">$ {total_r:,.2f}</td>
+                    <td>TOTAL TOP 20</td><td>---</td><td>---</td><td>---</td>
+                    <td class="numeric">$ {total_b:,.2f}</td><td class="numeric">$ {total_r:,.2f}</td>
                     <td class="numeric negative">$ {total_a:,.2f}</td>
                 </tr>
         """
-    else:
-        html_report += """<tr><td colspan="7" style="text-align:center;">Nenhum desvio crítico registrado para o período.</td></tr>"""
-
-    html_report += f"""
+    html_report += """
                 </tbody>
             </table>
-            
-            <div class="footer-notice">
-                AGCO SA — Sistema de Relatórios de Manufatura SA — Gerado em {datetime.now().strftime("%d/%m/%Y")} — Altamente Confidencial
-            </div>
         </div>
     </body>
     </html>
     """
 
     st.download_button(
-        label="📥 Baixar Relatório Executivo Completo (Com Gráficos)",
+        label="📥 Baixar Livro Executivo Ampliado (PDF/HTML)",
         data=html_report,
-        file_name=f"Relatorio_Diretoria_Capex_{m_lim}_{ano_s}.html",
-        mime="text/html",
-        help="Baixa o book completo formatado. Abra o arquivo e use Ctrl+P para Salvar como PDF perfeito."
+        file_name=f"Book_Executivo_Capex_{m_lim}_{ano_s}.html",
+        mime="text/html"
     )
 except Exception as err_pdf:
-    st.sidebar.error(f"Erro ao estruturar gráficos no report: {err_pdf}")
+    st.sidebar.error(f"Erro ao injetar novos gráficos na exportação: {err_pdf}")
 
-# EXPANDER DE SEGURANÇA (DADOS BRUTOS)
 with st.expander("🔍 Ver Tabela de Dados Brutos"):
     if 'df_f' in locals() and not df_f.empty:
         df_view = df_f.copy()
         df_view['Val'] = df_view['Val'].map(lambda x: f"$ {x:,.2f}")
         st.dataframe(df_view, use_container_width=True)
-    else:
-        st.info("Nenhum dado bruto encontrado para os filtros selecionados.")
+
+
