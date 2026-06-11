@@ -285,10 +285,10 @@ if v_b and v_r and v_b in df_cross.columns:
 # ==========================================
 st.write("---")
 st.subheader("🖨️ Exportação Completa para Diretoria")
-st.markdown("Clique no botão abaixo para gerar o report consolidado completo contendo todas as visões e gráficos coloridos.")
+st.markdown("Clique no botão abaixo para gerar o report consolidado completo contendo todas as visões e gráficos.")
 
 try:
-    # Renderização e exportação estável das estruturas de gráficos de tela para objetos HTML lineares
+    # Renderização das estruturas de gráficos para objetos HTML lineares
     chart_main_html = fig_main.to_html(full_html=False, include_plotlyjs='cdn')
     chart_p_html = fig_p.to_html(full_html=False, include_plotlyjs='cdn')
     chart_pl_html = fig_pl.to_html(full_html=False, include_plotlyjs='cdn')
@@ -298,79 +298,79 @@ try:
     chart_run_html = fig_run.to_html(full_html=False, include_plotlyjs='cdn') if fig_run else ""
     chart_pareto_html = fig_pareto.to_html(full_html=False, include_plotlyjs='cdn') if fig_pareto else ""
 
-    html_report = f"""
-    <!DOCTYPE html>
-    <html lang="pt-BR">
-    <head>
-        <meta charset="UTF-8">
-        <title>Report Executivo de Capex</title>
-        <style>
-            * {{ -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }}
-            @media print {{ body {{ background: #fff; }} .report-wrapper {{ border: none !important; box-shadow: none !important; padding: 0 !important; max-width: 100% !important; }} }}
-            @page {{ size: A4; margin: 20mm 15mm 20mm 15mm; }}
-            body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #2b2b2b; margin: 0; padding: 20px; background-color: #fafafa; }}
-            .report-wrapper {{ max-width: 900px; margin: 0 auto; background: #fff; padding: 40px; border: 1px solid #e0e0e0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }}
-            .header {{ border-bottom: 3px solid #a11f1f; padding-bottom: 12px; margin-bottom: 25px; }}
-            .title {{ font-size: 20pt; font-weight: bold; color: #a11f1f; text-transform: uppercase; letter-spacing: 0.5px; }}
-            .subtitle {{ font-size: 11pt; color: #555; margin-top: 5px; font-weight: 500; }}
-            h2 {{ font-size: 13pt; color: #1a1a1a; margin: 35px 0 15px 0; padding-left: 8px; border-left: 4px solid #a11f1f; text-transform: uppercase; page-break-after: avoid; }}
-            p {{ font-size: 10pt; color: #444; margin-bottom: 12px; text-align: justify; }}
-            table.kpi-table {{ width: 100%; border-collapse: separate; border-spacing: 12px 0; margin: 15px -12px; }}
-            td.kpi-card {{ width: 33.33%; background-color: #f8f9fa !important; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; vertical-align: top; border-left: 4px solid #a11f1f !important; }}
-            .chart-box {{ background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; margin-bottom: 30px; page-break-inside: avoid; }}
-            table.data-table {{ width: 100%; border-collapse: collapse; margin-top: 15px; page-break-inside: avoid; }}
-            table.data-table th {{ background-color: #343a40 !important; color: white !important; padding: 10px; font-size: 9pt; text-transform: uppercase; border: 1px solid #343a40; }}
-            table.data-table td {{ padding: 8px 10px; border: 1px solid #dee2e6; font-size: 9pt; }}
-            table.data-table tr:nth-child(even) {{ background-color: #f8f9fa !important; }}
-            table.data-table tr.total-row {{ background-color: #e9ecef !important; font-weight: bold; }}
-            .numeric {{ text-align: right; }}
-            .negative {{ color: #c9302c; font-weight: bold; }}
-            .footer-notice {{ margin-top: 40px; font-size: 8pt; color: #999; text-align: center; border-top: 1px solid #eee; padding-top: 15px; }}
-        </style>
-    </head>
-    <body>
-        <div class="report-wrapper">
-            <div class="header">
-                <div class="title">Capex - Status Corporativo Global</div>
-                <div class="subtitle">Book Executivo Consolidado — América do Sul — Ano Base {ano_s} (YTD até {m_lim})</div>
-            </div>
+    # 1. Início do Report (Cabeçalho e Estrutura Inicial)
+    html_report = f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Report Executivo de Capex</title>
+    <style>
+        * {{ -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }}
+        @media print {{ body {{ background: #fff; }} .report-wrapper {{ border: none !important; box-shadow: none !important; padding: 0 !important; max-width: 100% !important; }} }}
+        @page {{ size: A4; margin: 20mm 15mm 20mm 15mm; }}
+        body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #2b2b2b; margin: 0; padding: 20px; background-color: #fafafa; }}
+        .report-wrapper {{ max-width: 900px; margin: 0 auto; background: #fff; padding: 40px; border: 1px solid #e0e0e0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }}
+        .header {{ border-bottom: 3px solid #a11f1f; padding-bottom: 12px; margin-bottom: 25px; }}
+        .title {{ font-size: 20pt; font-weight: bold; color: #a11f1f; text-transform: uppercase; letter-spacing: 0.5px; }}
+        .subtitle {{ font-size: 11pt; color: #555; margin-top: 5px; font-weight: 500; }}
+        h2 {{ font-size: 13pt; color: #1a1a1a; margin: 35px 0 15px 0; padding-left: 8px; border-left: 4px solid #a11f1f; text-transform: uppercase; page-break-after: avoid; }}
+        p {{ font-size: 10pt; color: #444; margin-bottom: 12px; text-align: justify; }}
+        table.kpi-table {{ width: 100%; border-collapse: separate; border-spacing: 12px 0; margin: 15px -12px; }}
+        td.kpi-card {{ width: 33.33%; background-color: #f8f9fa !important; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; vertical-align: top; border-left: 4px solid #a11f1f !important; }}
+        .chart-box {{ background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; margin-bottom: 30px; page-break-inside: avoid; }}
+        table.data-table {{ width: 100%; border-collapse: collapse; margin-top: 15px; page-break-inside: avoid; }}
+        table.data-table th {{ background-color: #343a40 !important; color: white !important; padding: 10px; font-size: 9pt; text-transform: uppercase; border: 1px solid #343a40; }}
+        table.data-table td {{ padding: 8px 10px; border: 1px solid #dee2e6; font-size: 9pt; }}
+        table.data-table tr:nth-child(even) {{ background-color: #f8f9fa !important; }}
+        table.data-table tr.total-row {{ background-color: #e9ecef !important; font-weight: bold; }}
+        .numeric {{ text-align: right; }}
+        .negative {{ color: #c9302c; font-weight: bold; }}
+        .footer-notice {{ margin-top: 40px; font-size: 8pt; color: #999; text-align: center; border-top: 1px solid #eee; padding-top: 15px; }}
+    </style>
+</head>
+<body>
+    <div class="report-wrapper">
+        <div class="header">
+            <div class="title">Capex - Status Corporativo Global</div>
+            <div class="subtitle">Book Executivo Consolidado — América do Sul — Ano Base {ano_s} (YTD até {m_lim})</div>
+        </div>
 
-            <p>Este relatório oficial reflete a compilação de investimentos de ativos imobilizados das plantas de manufatura da região, detalhando os desvios e horizontes preditivos.</p>
+        <p>Este relatório oficial reflete a compilação de investimentos de ativos imobilizados das plantas de manufatura da região, detalhando os desvios e horizontes preditivos.</p>
 
-            <table class="kpi-table">
+        <table class="kpi-table">
+            <tr>
+                <td class="kpi-card"><div style="font-size:8pt;color:#6c757d;font-weight:bold;text-transform:uppercase;">REALIZADO YTD</div><div style="font-size:14pt;font-weight:bold;margin-top:4px;">$ {val_real:,.2f}</div></td>
+                <td class="kpi-card" style="border-left-color: #0066cc !important;"><div style="font-size:8pt;color:#6c757d;font-weight:bold;text-transform:uppercase;">BUDGET YTD</div><div style="font-size:14pt;font-weight:bold;margin-top:4px;">$ {val_budg:,.2f}</div></td>
+                <td class="kpi-card" style="border-left-color: #3b7aae !important;"><div style="font-size:8pt;color:#6c757d;font-weight:bold;text-transform:uppercase;">FORECAST (2+10)</div><div style="font-size:14pt;font-weight:bold;margin-top:4px;">$ {val_fcast:,.2f}</div></td>
+            </tr>
+        </table>
+
+        <h2>1. Evolução e Sumário por Estruturas e Sites</h2>
+        <div class="chart-box">{chart_main_html}</div>
+        <div class="chart-box">{chart_p_html}</div>
+        <div class="chart-box">{chart_pl_html}</div>
+        <div class="chart-box">{chart_ev_html}</div>
+
+        <h2>2. Matriz de Alocação e Criticidade de Desvios</h2>
+        <div class="chart-box">{chart_scatter_html}</div>
+
+        <h2>3. Análise Preditiva de Fechamento (Run Rate Anual)</h2>
+        <div class="chart-box">{chart_run_html}</div>
+
+        <h2>4. Concentração de Linhas de Investimento (Pareto Top 15)</h2>
+        <div class="chart-box">{chart_pareto_html}</div>
+
+        <h2>5. Análise Mapeada de Desvios Críticos: TOP 20 Projetos</h2>
+        <table class="data-table">
+            <thead>
                 <tr>
-                    <td class="kpi-card"><div style="font-size:8pt;color:#6c757d;font-weight:bold;text-transform:uppercase;">REALIZADO YTD</div><div style="font-size:14pt;font-weight:bold;margin-top:4px;">$ {val_real:,.2f}</div></td>
-                    <td class="kpi-card" style="border-left-color: #0066cc !important;"><div style="font-size:8pt;color:#6c757d;font-weight:bold;text-transform:uppercase;">BUDGET YTD</div><div style="font-size:14pt;font-weight:bold;margin-top:4px;">$ {val_budg:,.2f}</div></td>
-                    <td class="kpi-card" style="border-left-color: #3b7aae !important;"><div style="font-size:8pt;color:#6c757d;font-weight:bold;text-transform:uppercase;">FORECAST (2+10)</div><div style="font-size:14pt;font-weight:bold;margin-top:4px;">$ {val_fcast:,.2f}</div></td>
+                    <th>Item</th><th>Nome do Projeto</th><th>Área</th><th>Planta</th>
+                    <th class="numeric">Budget YTD</th><th class="numeric">Realizado YTD</th><th class="numeric">Atraso</th>
                 </tr>
-            </table>
+            </thead>
+            <tbody>"""
 
-            <h2>1. Evolução e Sumário por Estruturas e Sites</h2>
-            <div class="chart-box">{chart_main_html}</div>
-            <div class="chart-box">{chart_p_html}</div>
-            <div class="chart-box">{chart_pl_html}</div>
-            <div class="chart-box">{chart_ev_html}</div>
-
-            <h2>2. Matriz de Alocação e Criticidade de Desvios</h2>
-            <div class="chart-box">{chart_scatter_html}</div>
-
-            <h2>3. Análise Preditiva de Fechamento (Run Rate Anual)</h2>
-            <div class="chart-box">{chart_run_html}</div>
-
-            <h2>4. Concentração de Linhas de Investimento (Pareto Top 15)</h2>
-            <div class="chart-box">{chart_pareto_html}</div>
-
-            <h2>5. Análise Mapeada de Desvios Críticos: TOP 20 Projetos</h2>
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Item</th><th>Nome do Projeto</th><th>Área</th><th>Planta</th>
-                        <th class="numeric">Budget YTD</th><th class="numeric">Realizado YTD</th><th class="numeric">Atraso</th>
-                    </tr>
-                </thead>
-                <tbody>
-    """
-
+    # 2. Loop das linhas da tabela analítica (Garantindo que concatena sem quebrar)
     if 'df_top_20' in locals() and not df_top_20.empty:
         for _, r in df_top_20.iterrows():
             html_report += f"""
@@ -378,21 +378,37 @@ try:
                     <td>{r['Nro_Item Código']}</td><td>{r['Nome do Projeto']}</td><td>{r['Área']}</td><td>{r['Planta']}</td>
                     <td class="numeric">$ {r['Budget YTD']:,.2f}</td><td class="numeric">$ {r['Realizado YTD']:,.2f}</td>
                     <td class="numeric negative">$ {r['Atraso (USD)']:,.2f}</td>
-                </tr>
-            """
+                </tr>"""
+        
+        # Linha de Totais da Tabela
         html_report += f"""
                 <tr class="total-row">
                     <td>TOTAL TOP 20</td><td>---</td><td>---</td><td>---</td>
                     <td class="numeric">$ {total_b:,.2f}</td><td class="numeric">$ {total_r:,.2f}</td>
                     <td class="numeric negative">$ {total_a:,.2f}</td>
-                </tr>
-        """
+                </tr>"""
     else:
         html_report += """<tr><td colspan="7" style="text-align:center;">Nenhum desvio crítico registrado para o período.</td></tr>"""
 
+    # 3. Fechamento do arquivo HTML com segurança
     html_report += f"""
-                </tbody>
-            </table>
-            <div class="footer-notice">
-                Sistema de Relatórios de Manufatura — Gerado em {datetime.now().strftime("%d/%m/%Y")}
+            </tbody>
+        </table>
+        <div class="footer-notice">
+            Sistema de Relatórios de Manufatura — Gerado em {datetime.now().strftime("%d/%m/%Y")}
+        </div>
+    </div>
+</body>
+</html>"""
+    
+    # Botão de download nativo do Streamlit para o Report Executivo
+    st.download_button(
+        label="📥 Baixar Book Executivo Completo (HTML)",
+        data=html_report,
+        file_name=f"Capex_Report_América_do_Sul_{m_lim}_{ano_s}.html",
+        mime="text/html"
+    )
+
+except Exception as exp:
+    st.warning(f"Aviso técnico sobre a preparação do book de exportação: {exp}")
     
