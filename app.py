@@ -61,33 +61,33 @@ else:
 # PARTE 2: PADRONIZAÇÃO E DESPIVOTEAMENTO (HORIZONTAl -> VERTICAL)
 # =========================================================
 if df_base is not None:
-    # 1. Remove espaços invisíveis dos nomes das colunas originais
+    # 1. Remove espaços invisíveis antes e depois dos nomes de todas as colunas
     df_base.columns = df_base.columns.astype(str).str.strip()
     
-    # 2. Mapeamento inteligente de colunas fixas para tolerar variações de escrita
+    # 2. Mapeamento ultra flexível de colunas fixas (ajuste os nomes abaixo se necessário)
     mapeamento_colunas = {}
     for col in df_base.columns:
         col_lower = col.lower()
-        if col_lower in ['versão', 'versao', 'cenário', 'cenario', 'tipo']:
+        if col_lower in ['versão', 'versao', 'cenário', 'cenario', 'tipo', 'cenarios', 'versoes']:
             mapeamento_colunas[col] = "Versão"
-        elif col_lower in ['planta', 'site', 'unidade', 'filial']:
+        elif col_lower in ['planta', 'site', 'unidade', 'filial', 'plantas', 'sites']:
             mapeamento_colunas[col] = "Planta"
-        elif col_lower in ['área', 'area', 'diretoria', 'setor']:
+        elif col_lower in ['área', 'area', 'diretoria', 'setor', 'áreas', 'areas', 'departamento']:
             mapeamento_colunas[col] = "Área"
-        elif col_lower in ['nro_item código', 'código', 'codigo', 'id', 'item']:
+        elif col_lower in ['nro_item código', 'código', 'codigo', 'id', 'item', 'nro_item', 'wbs', 'linha']:
             mapeamento_colunas[col] = "Nro_Item Código"
-        elif col_lower in ['nome do projeto', 'projeto', 'nome', 'descrição', 'descricao']:
+        elif col_lower in ['nome do projeto', 'projeto', 'nome', 'descrição', 'descricao', 'projetos']:
             mapeamento_colunas[col] = "Nome do Projeto"
             
     df_base = df_base.rename(columns=mapeamento_colunas)
 
-    # Lista de meses cronológicos esperados como colunas a partir da coluna O
+    # Lista de meses cronológicos esperados como colunas
     m_ord = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
     colunas_meses_encontradas = [m for m in m_ord if m in df_base.columns]
     colunas_identificadoras = [c for c in ["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Versão"] if c in df_base.columns]
 
     if colunas_meses_encontradas:
-        # Transforma a estrutura horizontal (meses em colunas) em formato vertical de banco de dados
+        # Transforma a estrutura horizontal em vertical de banco de dados
         df_base = pd.melt(
             df_base,
             id_vars=colunas_identificadoras,
@@ -98,26 +98,28 @@ if df_base is not None:
     else:
         st.title("📊 Gestão Estratégica de Investimentos Capex")
         st.error("⚠️ Nenhuma coluna de mês (Jan, Fev, Mar...) foi detectada no arquivo Excel.")
-        st.info(f"Colunas identificadas no arquivo: `{list(df_base.columns)}`")
+        st.info(f"Cabeçalhos identificados no seu arquivo: `{list(df_base.columns)}`")
         st.stop()
 
-# Validação final de consistência estrutural
+# --- DIAGNÓSTICO DE INCONSISTÊNCIA DE CAMPOS FIXOS ---
 colunas_obrigatorias = ["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Versão", "Mês", "Val"]
 colunas_ausentes = [c for c in colunas_obrigatorias if c not in df_base.columns]
 
 if colunas_ausentes:
     st.title("📊 Gestão Estratégica de Investimentos Capex")
-    st.error(f"⚠️ Estrutura de campos fixos inconsistente.")
-    st.markdown(f"**Não encontramos os campos:** `{colunas_ausentes}`")
+    st.error(f"⚠️ A estrutura de campos fixos está inconsistente.")
+    st.markdown(f"**Campos obrigatórios que o sistema NÃO encontrou:** `{colunas_ausentes}`")
+    st.write("---")
+    st.markdown("### 🔍 Painel de Diagnóstico do seu Excel")
+    st.markdown("Veja abaixo como o Streamlit interpretou os cabeçalhos da primeira aba do seu arquivo após a limpeza automática:")
+    st.info(f"**Colunas atuais detectadas:** `{list(df_base.columns)}`")
+    st.markdown("""
+    **💡 Como corrigir rápido:**
+    1. Verifique se o nome de alguma coluna fixa no seu Excel está muito diferente (ex: em vez de 'Planta' está 'Local' ou 'Fábrica').
+    2. Se estiver, você pode simplesmente alterar o nome no seu Excel para um dos padrões aceitos ou me avisar o nome exato para eu adicionar no código acima.
+    """)
     st.stop()
-
-# Tratamento final seguro de tipos de dados
-df_base["Versão"] = df_base["Versão"].astype(str).str.strip()
-df_base["Mês"] = df_base["Mês"].astype(str).str.strip()
-df_base["Planta"] = df_base["Planta"].astype(str).str.strip()
-df_base["Área"] = df_base["Área"].astype(str).str.strip()
-df_base["Val"] = pd.to_numeric(df_base["Val"], errors='coerce').fillna(0.0)
-
+    
 # ==========================================
 # PARTE 3: FILTROS CORPORATIVOS DINÂMICOS
 # ==========================================
