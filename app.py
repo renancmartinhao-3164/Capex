@@ -7,14 +7,26 @@ from datetime import datetime
 st.set_page_config(page_title="Dashboard de Capex Executivo", layout="wide")
 
 # ==========================================
-# PARTE 1: CARREGAMENTO E TRATAMENTO DE DADOS
+# PARTE 1: CARREGAMENTO E TRATAMENTO DE DADOS (COM UPLOAD)
 # ==========================================
 @st.cache_data
+def processar_excel(file):
+    # Lê o arquivo enviado pelo usuário
+    df = pd.read_excel(file)
+    return df
+
 def carregar_dados():
-    # Substitua pelo caminho correto do seu arquivo ou banco de dados
-    # Exemplo: df = pd.read_excel("seus_dados_capex.xlsx")
+    st.sidebar.markdown("### 📂 Upload de Dados")
+    arquivo_enviado = st.sidebar.file_uploader("Selecione a planilha de Capex (Excel)", type=["xlsx", "xls"])
     
-    # MASSA DE TESTE CORRIGIDA: Todas as listas possuem exatamente 30 elementos
+    if arquivo_enviado is not None:
+        try:
+            return processar_excel(arquivo_enviado)
+        except Exception as e:
+            st.sidebar.error(f"Erro ao ler o arquivo Excel: {e}")
+            
+    # MASSA DE TESTE (Backup caso nenhum arquivo seja carregado)
+    st.sidebar.info("💡 Exibindo massa de dados de teste. Faça o upload da sua planilha acima para atualizar.")
     dados_teste = {
         "Nro_Item Código": [f"PRJ-{i:03d}" for i in range(1, 31)],
         "Nome do Projeto": [f"Iniciativa de Expansão e Melhoria {i}" for i in range(1, 31)],
@@ -31,28 +43,7 @@ try:
 except Exception as e:
     st.error(f"Erro ao carregar a base de dados: {e}")
     st.stop()
-
-# --- BLINDAGEM E PADRONIZAÇÃO DE COLUNAS ---
-df_base.columns = df_base.columns.str.lower().str.strip()
-
-col_versao = next((c for c in df_base.columns if 'vers' in c), None)
-col_mes = next((c for c in df_base.columns if 'mês' in c or 'mes' in c), None)
-col_planta = next((c for c in df_base.columns if 'plant' in c or 'site' in c), None)
-col_area = next((c for c in df_base.columns if 'área' in c or 'area' in c), None)
-col_codigo = next((c for c in df_base.columns if 'cód' in c or 'cod' in c or 'item' in c), "nro_item código")
-col_nome = next((c for c in df_base.columns if 'nome' in c or 'proj' in c), "nome do projeto")
-col_val = next((c for c in df_base.columns if 'val' in c or 'mont' in c), "val")
-
-if not all([col_versao, col_mes, col_planta, col_area]):
-    st.error("❌ Erro estrutural: A base de dados não possui as colunas necessárias (Versão, Mês, Planta/Site, Área).")
-    st.stop()
-
-# Garantir padronização dos textos para evitar falhas de filtros
-df_base[col_versao] = df_base[col_versao].astype(str).str.strip()
-df_base[col_mes] = df_base[col_mes].astype(str).str.strip()
-df_base[col_planta] = df_base[col_planta].astype(str).str.strip()
-df_base[col_area] = df_base[col_area].astype(str).str.strip()
-
+    
 # Renomeia para manter compatibilidade com o resto do script do dashboard
 df_base = df_base.rename(columns={
     col_codigo: "Nro_Item Código",
