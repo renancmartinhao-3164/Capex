@@ -27,7 +27,7 @@ origem_dados = st.sidebar.radio(
 )
 
 # Definição do nome do arquivo padrão que fica salvo no servidor/repositório
-ARQUIVO_PADRAO = "seus_dados_capex.xlsx"
+ARQUIVO_PADRAO = "capex_update.xlsx"
 
 @st.cache_data
 def carregar_dados_excel(file_path_or_buffer):
