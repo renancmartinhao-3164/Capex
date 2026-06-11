@@ -14,24 +14,17 @@ def carregar_dados():
     # Substitua pelo caminho correto do seu arquivo ou banco de dados
     # Exemplo: df = pd.read_excel("seus_dados_capex.xlsx")
     
-    # Simulação da estrutura de dados para garantir a execução do app
-    # Remova ou comente esta massa de testes quando conectar sua base real
+    # MASSA DE TESTE CORRIGIDA: Todas as listas possuem exatamente 30 elementos
     dados_teste = {
-        "Nro_Item Código": [f"PRJ-{i:03d}" for i in range(1, 30)],
-        "Nome do Projeto": [f"Iniciativa de Expansão e Melhoria {i}" for i in range(1, 30)],
+        "Nro_Item Código": [f"PRJ-{i:03d}" for i in range(1, 31)],
+        "Nome do Projeto": [f"Iniciativa de Expansão e Melhoria {i}" for i in range(1, 31)],
         "Área": ["Manufatura", "Logística", "Engenharia", "Qualidade", "TI"] * 6,
-        "Planta": ["Mogi das Cruzes", "Canoas", "Ibirubá", "Santa Rosa"] * 7 + ["Mogi das Cruzes"],
-        "Versão": ["Budget YTD", "Realizado YTD", "Forecast"] * 29,
-        "Mês": ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun"] * 14 + ["Jan", "Fev", "Mar", "Abr", "Mai"],
-        "Val": [50000, 42000, 48000, 120000, 30000, 95000, 15000] * 12 + [60000, 22000, 5000]
+        "Planta": ["Mogi das Cruzes", "Canoas", "Ibirubá", "Santa Rosa"] * 7 + ["Mogi das Cruzes", "Canoas"],
+        "Versão": ["Budget YTD", "Realizado YTD", "Forecast"] * 10,
+        "Mês": ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun"] * 5,
+        "Val": [50000, 42000, 48000, 120000, 30000, 95000] * 5
     }
     return pd.DataFrame(dados_teste)
-
-try:
-    df_base = carregar_dados()
-except Exception as e:
-    st.error(f"Erro ao carregar a base de dados: {e}")
-    st.stop()
 
 # Garantir padronização das colunas de texto para evitar falhas de filtros
 df_base["Versão"] = df_base["Versão"].astype(str).str.strip()
