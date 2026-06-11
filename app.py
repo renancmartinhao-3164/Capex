@@ -181,11 +181,14 @@ else:
 # ==========================================
     st.write("---")
     
+    # Cor padrão para manter a identidade visual nos gráficos e no PDF
+    cor_graficos = ["#a11f1f"]  # Vermelho corporativo (ou troque por "#0066cc" para azul)
+    
     # 1. Comparativo Geral
     st.subheader(f"📊 Comparativo Geral Capex YTD (Jan a {m_lim}) - USD")
-    fig_main = px.bar(df_f.groupby("Versão")["Val"].sum().reset_index(), x="Versão", y="Val", color="Versão", text_auto='.2f')
+    fig_main = px.bar(df_f.groupby("Versão")["Val"].sum().reset_index(), x="Versão", y="Val", color_discrete_sequence=cor_graficos, text_auto='.2f')
     fig_main.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
-    fig_main.update_layout(yaxis_tickformat='$', height=450)
+    fig_main.update_layout(yaxis_tickformat='$', height=450, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
     st.plotly_chart(fig_main, use_container_width=True)
 
     st.write("---")
@@ -195,16 +198,16 @@ else:
     df_proj_ver = df_f.groupby(["Projeto", "Versão"])["Val"].sum().reset_index()
     fig_p = px.bar(df_proj_ver, x="Projeto", y="Val", color="Versão", barmode="group", text_auto='.2f')
     fig_p.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
-    fig_p.update_layout(yaxis_tickformat='$', xaxis_title="Tipo de Projeto", legend_title="Cenário", xaxis={'categoryorder':'total descending'}, height=480)
+    fig_p.update_layout(yaxis_tickformat='$', xaxis_title="Tipo de Projeto", legend_title="Cenário", xaxis={'categoryorder':'total descending'}, height=480, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
     st.plotly_chart(fig_p, use_container_width=True)
         
     st.write("---")
 
     # 3. Distribuição por Site
     st.subheader("🏢 Distribuição Total por Site")
-    fig_pl = px.bar(df_f.groupby("Planta")["Val"].sum().reset_index().sort_values("Val", ascending=False), x="Planta", y="Val", color="Planta", text_auto='.2f')
+    fig_pl = px.bar(df_f.groupby("Planta")["Val"].sum().reset_index().sort_values("Val", ascending=False), x="Planta", y="Val", color_discrete_sequence=cor_graficos, text_auto='.2f')
     fig_pl.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
-    fig_pl.update_layout(yaxis_tickformat='$', showlegend=False, xaxis_title="Site", height=450)
+    fig_pl.update_layout(yaxis_tickformat='$', showlegend=False, xaxis_title="Site", height=450, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
     st.plotly_chart(fig_pl, use_container_width=True)
 
     st.write("---")
@@ -218,10 +221,10 @@ else:
     
     fig_ev = px.line(df_ev_sorted, x="Mês", y="Val", color="Versão", markers=True, text="Label_Txt")
     fig_ev.update_traces(textposition='top center')
-    fig_ev.update_layout(yaxis_tickformat='$', height=450)
+    fig_ev.update_layout(yaxis_tickformat='$', height=450, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
     st.plotly_chart(fig_ev, use_container_width=True)
 
-    # 5. TABELA ANALÍTICA DE ATRASOS (ABAIXO DO GRÁFICO TEMPORAL)
+    # 5. TABELA ANALÍTICA DE ATRASOS
     st.write("---")
     st.subheader(f"⚠️ Análise de Desvios: TOP 20 Projetos em Atraso no Desembolso YTD (Até {m_lim})")
     st.markdown("A tabela abaixo rastreia os desvios utilizando a chave **Nro_Item Código** combinada com o **Nome do Projeto (Coluna I)**.")
@@ -247,7 +250,6 @@ else:
             else:
                 df_exibicao = df_top_20[["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Budget YTD", "Realizado YTD", "Atraso (USD)"]].copy()
                 
-                # CÁLCULO DA LINHA DE TOTAL
                 total_b = df_top_20["Budget YTD"].sum()
                 total_r = df_top_20["Realizado YTD"].sum()
                 total_a = df_top_20["Atraso (USD)"].sum()
@@ -271,29 +273,24 @@ else:
         else:
             st.warning("⚠️ Colunas de cenários insuficientes para o cruzamento de dados.")
 
-# EXPANDER DE SEGURANÇA (DADOS BRUTOS)
-with st.expander("🔍 Ver Tabela de Dados Brutos"):
-    if 'df_f' in locals() and not df_f.empty:
-        df_view = df_f.copy()
-        df_view['Val'] = df_view['Val'].map(lambda x: f"$ {x:,.2f}")
-        st.dataframe(df_view, use_container_width=True)
-    else:
-        st.info("Nenhum dado bruto encontrado para os filtros selecionados.")
+
 # ==========================================
-# PARTE COMPLEMENTAR: EXPORTAÇÃO EXECUTIVA COMPLETA
+# PARTE COMPLEMENTAR: EXPORTAÇÃO EXECUTIVA CORRIGIDA
 # ==========================================
 st.write("---")
 st.subheader("🖨️ Exportação Completa para Diretoria")
-st.markdown("Clique no botão abaixo para gerar a versão oficial consolidada com **KPIs, Gráficos e Tabelas**, formatada para envio ou impressão.")
+st.markdown("Clique no botão abaixo para gerar a versão oficial consolidada com **KPIs, Gráficos Coloridos e Tabelas**.")
 
 try:
-    # 1. Conversão dos gráficos do Plotly para HTML inline seguro
+    # Forçar a renderização com cores explícitas antes de converter para o HTML de exportação
+    fig_main.update_layout(colorway=cor_graficos)
+    fig_pl.update_layout(colorway=cor_graficos)
+    
     chart_main_html = fig_main.to_html(full_html=False, include_plotlyjs='cdn')
     chart_p_html = fig_p.to_html(full_html=False, include_plotlyjs='cdn')
     chart_pl_html = fig_pl.to_html(full_html=False, include_plotlyjs='cdn')
     chart_ev_html = fig_ev.to_html(full_html=False, include_plotlyjs='cdn')
 
-    # 2. Estrutura do Relatório Executivo Completo
     html_report = f"""
     <!DOCTYPE html>
     <html lang="pt-BR">
@@ -301,13 +298,19 @@ try:
         <meta charset="UTF-8">
         <title>Relatório de Investimentos Capex</title>
         <style>
+            /* IMPORTANTE: Forçar o navegador a imprimir cores de fundo e gráficos */
+            * {{
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }}
             @media print {{
                 .no-print {{ display: none; }}
-                body {{ background: #fff; color: #000; }}
+                body {{ background: #fff; color: #000; padding: 0; }}
+                .report-wrapper {{ border: none !important; box-shadow: none !important; padding: 0 !important; max-width: 100% !important; }}
             }}
             @page {{
-                size: letter;
-                margin: 15mm 15mm 15mm 15mm;
+                size: A4;
+                margin: 20mm 15mm 20mm 15mm;
             }}
             body {{
                 font-family: 'Segoe UI', Arial, sans-serif;
@@ -321,9 +324,9 @@ try:
                 max-width: 900px;
                 margin: 0 auto;
                 background: #fff;
-                padding: 30px;
+                padding: 40px;
                 border: 1px solid #e0e0e0;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+                box-shadow: 0 4px 12px rgba(0,0,0,0.05);
             }}
             .header {{
                 border-bottom: 3px solid #a11f1f;
@@ -337,7 +340,7 @@ try:
             h2 {{
                 font-size: 13pt;
                 color: #1a1a1a;
-                margin: 30px 0 15px 0;
+                margin: 35px 0 15px 0;
                 padding-left: 8px;
                 border-left: 4px solid #a11f1f;
                 text-transform: uppercase;
@@ -346,33 +349,30 @@ try:
             
             p {{ margin: 0 0 12px 0; color: #444; text-align: justify; font-size: 10pt; }}
             
-            /* KPIs */
             table.kpi-table {{ width: 100%; border-collapse: separate; border-spacing: 12px 0; margin: 15px -12px; }}
-            td.kpi-card {{ width: 33.33%; background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; vertical-align: top; border-left: 4px solid #ff2a2a; }}
+            td.kpi-card {{ width: 33.33%; background-color: #f8f9fa !important; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; vertical-align: top; border-left: 4px solid #a11f1f !important; }}
             .kpi-label {{ font-size: 8pt; color: #6c757d; font-weight: bold; text-transform: uppercase; }}
             .kpi-value {{ font-size: 15pt; font-weight: bold; color: #1a1a1a; margin-top: 4px; }}
             
-            /* Gráficos Contêiner */
             .chart-box {{
                 background: #ffffff;
                 border: 1px solid #e2e8f0;
                 border-radius: 6px;
-                padding: 10px;
-                margin-bottom: 25px;
+                padding: 15px;
+                margin-bottom: 30px;
                 page-break-inside: avoid;
             }}
             
-            /* Tabelas */
             table.data-table {{ width: 100%; border-collapse: collapse; margin-top: 15px; margin-bottom: 20px; page-break-inside: avoid; }}
-            table.data-table th {{ background-color: #343a40; color: white; font-weight: bold; text-align: left; padding: 8px 10px; font-size: 9pt; border: 1px solid #343a40; text-transform: uppercase; }}
-            table.data-table td {{ padding: 7px 10px; border: 1px solid #dee2e6; font-size: 9pt; }}
-            table.data-table tr:nth-child(even) {{ background-color: #f8f9fa; }}
+            table.data-table th {{ background-color: #343a40 !important; color: white !important; font-weight: bold; text-align: left; padding: 9px 10px; font-size: 9pt; border: 1px solid #343a40; text-transform: uppercase; }}
+            table.data-table td {{ padding: 8px 10px; border: 1px solid #dee2e6; font-size: 9pt; }}
+            table.data-table tr:nth-child(even) {{ background-color: #f8f9fa !important; }}
             table.data-table tr.total-row {{ background-color: #e9ecef !important; font-weight: bold; }}
             table.data-table tr.total-row td {{ border-top: 2px solid #495057; border-bottom: 2px solid #495057; color: #000; }}
             .numeric {{ text-align: right; }}
             .negative {{ color: #c9302c; font-weight: bold; }}
             
-            .footer-notice {{ margin-top: 30px; font-size: 8pt; color: #999; text-align: center; border-top: 1px solid #eee; padding-top: 10px; }}
+            .footer-notice {{ margin-top: 40px; font-size: 8pt; color: #999; text-align: center; border-top: 1px solid #eee; padding-top: 15px; }}
         </style>
     </head>
     <body>
@@ -391,11 +391,11 @@ try:
                         <div class="kpi-label">Realizado Cumulativo YTD</div>
                         <div class="kpi-value">$ {val_real:,.2f}</div>
                     </td>
-                    <td class="kpi-card" style="border-left-color: #0066cc;">
+                    <td class="kpi-card" style="border-left-color: #0066cc !important;">
                         <div class="kpi-label">Budget Original YTD</div>
                         <div class="kpi-value">$ {val_budg:,.2f}</div>
                     </td>
-                    <td class="kpi-card" style="border-left-color: #3b7aae;">
+                    <td class="kpi-card" style="border-left-color: #3b7aae !important;">
                         <div class="kpi-label">Forecast Projetado (2+10)</div>
                         <div class="kpi-value">$ {val_fcast:,.2f}</div>
                     </td>
@@ -432,7 +432,6 @@ try:
                 <tbody>
     """
 
-    # Injeção das linhas dinâmicas filtradas do TOP 20
     if 'df_top_20' in locals() and not df_top_20.empty:
         for _, r in df_top_20.iterrows():
             html_report += f"""
@@ -446,7 +445,6 @@ try:
                     <td class="numeric negative">$ {r['Atraso (USD)']:,.2f}</td>
                 </tr>
             """
-        # Linha de Totais da Tabela
         html_report += f"""
                 <tr class="total-row">
                     <td>TOTAL TOP 20</td>
@@ -473,14 +471,21 @@ try:
     </html>
     """
 
-    # 3. Botão Estruturado para Download
     st.download_button(
         label="📥 Baixar Relatório Executivo Completo (Com Gráficos)",
         data=html_report,
         file_name=f"Relatorio_Diretoria_Capex_{m_lim}_{ano_s}.html",
         mime="text/html",
         help="Baixa o book completo formatado. Abra o arquivo e use Ctrl+P para Salvar como PDF perfeito."
-)
+    )
 except Exception as err_pdf:
     st.sidebar.error(f"Erro ao estruturar gráficos no report: {err_pdf}")
-    
+
+# EXPANDER DE SEGURANÇA (DADOS BRUTOS)
+with st.expander("🔍 Ver Tabela de Dados Brutos"):
+    if 'df_f' in locals() and not df_f.empty:
+        df_view = df_f.copy()
+        df_view['Val'] = df_view['Val'].map(lambda x: f"$ {x:,.2f}")
+        st.dataframe(df_view, use_container_width=True)
+    else:
+        st.info("Nenhum dado bruto encontrado
