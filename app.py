@@ -84,13 +84,23 @@ if df_base is not None:
             mapeamento_colunas[col] = "Nome do Projeto"
         elif col_lower in ['ano', 'exercício', 'exercicio', 'ano_base']:
             mapeamento_colunas[col] = "Ano"
+        elif col_lower in ['responsável', 'responsavel', 'owner', 'resp', 'responsáveis', 'responsaveis']:
+            mapeamento_colunas[col] = "Responsável"
+        elif col_lower in ['status', 'situação', 'situacao', 'estado', 'fase']:
+            mapeamento_colunas[col] = "Status"
             
     df_base = df_base.rename(columns=mapeamento_colunas)
+
+    # Cria colunas caso não existam no Excel para evitar quebras de compilação
+    if "Responsável" not in df_base.columns:
+        df_base["Responsável"] = "Não Informado"
+    if "Status" not in df_base.columns:
+        df_base["Status"] = "Não Informado"
 
     m_ord = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
     colunas_meses_encontradas = [m for m in m_ord if m in df_base.columns]
     
-    colunas_identificadoras = [c for c in ["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Versão", "Ano"] if c in df_base.columns]
+    colunas_identificadoras = [c for c in ["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Versão", "Ano", "Responsável", "Status"] if c in df_base.columns]
 
     if colunas_meses_encontradas:
         df_base = pd.melt(
@@ -111,6 +121,8 @@ df_base["Versão"] = df_base["Versão"].astype(str).str.strip()
 df_base["Mês"] = df_base["Mês"].astype(str).str.strip()
 df_base["Planta"] = df_base["Planta"].astype(str).str.strip()
 df_base["Área"] = df_base["Área"].astype(str).str.strip()
+df_base["Responsável"] = df_base["Responsável"].astype(str).str.strip().fillna("Não Informado")
+df_base["Status"] = df_base["Status"].astype(str).str.strip().fillna("Não Informado")
 df_base["Val"] = pd.to_numeric(df_base["Val"], errors='coerce').fillna(0.0)
 
 if "Ano" in df_base.columns:
@@ -257,7 +269,7 @@ st.plotly_chart(fig_ev, use_container_width=True)
 st.write("---")
 
 if v_b and v_r:
-    df_cross = df_f.groupby(["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Versão"])["Val"].sum().unstack(level="Versão").fillna(0).reset_index()
+    df_cross = df_f.groupby(["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Responsável", "Status", "Versão"])["Val"].sum().unstack(level="Versão").fillna(0).reset_index()
     
     if v_b in df_cross.columns and v_r in df_cross.columns:
         df_cross["Atraso (USD)"] = df_cross[v_b] - df_cross[v_r]
@@ -304,44 +316,72 @@ else:
     fig_scatter, fig_run, fig_pareto = None, None, None
 
 # =========================================================
-# PARTE 7: TABELA ANALÍTICA DE ATRASOS (TOP 20)
+# PARTE 7: TABELAS ANALÍTICAS DE ATRASOS (TOP 20)
 # =========================================================
 st.write("---")
-st.subheader(f"⚠️ Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD (Até {m_lim})")
 
-# String global para guardar a tabela estruturada em HTML para exportação posterior
-table_html_snippet = "<p>Sem dados de desvios analíticos para o cenário atual.</p>"
+# Definição de placeholders para injeção HTML estruturada
+table_html_snippet_budget = "<p>Sem dados de desvios de Budget para o cenário atual.</p>"
+table_html_snippet_forecast = "<p>Sem dados de desvios de Forecast para o cenário atual.</p>"
 
 if v_b and v_r and 'df_cross' in locals() and v_b in df_cross.columns and v_r in df_cross.columns:
-    df_atrasados = df_cross[df_cross["Atraso (USD)"] > 0].copy()
-    df_atrasados = df_atrasados.rename(columns={v_b: "Budget YTD", v_r: "Realizado YTD"})
-    df_top_20 = df_atrasados.sort_values(by="Atraso (USD)", ascending=False).head(20)
+    # --- TABELA 1: TOP 20 VS BUDGET ---
+    df_atrasados_b = df_cross[df_cross[v_b] - df_cross[v_r] > 0].copy()
+    df_atrasados_b["Atraso (USD)"] = df_atrasados_b[v_b] - df_atrasados_b[v_r]
+    df_atrasados_b = df_atrasados_b.rename(columns={v_b: "Budget YTD", v_r: "Realizado YTD"})
+    df_top_20_b = df_atrasados_b.sort_values(by="Atraso (USD)", ascending=False).head(20)
     
-    if df_top_20.empty:
-        st.success("✅ Nenhum projeto apresenta desembolso atrasado em relação ao Budget para os filtros aplicados.")
-        table_html_snippet = "<p style='color: green; font-weight: bold;'>✅ Nenhum projeto apresenta desembolso atrasado em relação ao Budget para os filtros aplicados.</p>"
+    st.subheader(f"⚠️ Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD vs. Budget (Até {m_lim})")
+    if df_top_20_b.empty:
+        st.success("✅ Nenhum projeto apresenta desembolso atrasado em relação ao Budget.")
+        table_html_snippet_budget = "<p style='color: green; font-weight: bold;'>✅ Nenhum projeto apresenta desembolso atrasado em relação ao Budget.</p>"
     else:
-        df_exibicao = df_top_20[["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Budget YTD", "Realizado YTD", "Atraso (USD)"]].copy()
-        total_b = df_top_20["Budget YTD"].sum()
-        total_r = df_top_20["Realizado YTD"].sum()
-        total_a = df_top_20["Atraso (USD)"].sum()
+        df_exibicao_b = df_top_20_b[["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Responsável", "Status", "Budget YTD", "Realizado YTD", "Atraso (USD)"]].copy()
+        total_b = df_top_20_b["Budget YTD"].sum()
+        total_r = df_top_20_b["Realizado YTD"].sum()
+        total_a = df_top_20_b["Atraso (USD)"].sum()
         
-        linha_total = pd.DataFrame([{
-            "Nro_Item Código": "TOTAL DO TOP 20", "Nome do Projeto": "---", "Área": "---", "Planta": "---",
+        linha_total_b = pd.DataFrame([{
+            "Nro_Item Código": "TOTAL DO TOP 20", "Nome do Projeto": "---", "Área": "---", "Planta": "---", "Responsável": "---", "Status": "---",
             "Budget YTD": total_b, "Realizado YTD": total_r, "Atraso (USD)": total_a
         }])
         
-        df_exibicao_com_total = pd.concat([df_exibicao, linha_total], ignore_index=True)
-        
-        # Aplica a formatação de moedas
+        df_exibicao_com_total_b = pd.concat([df_exibicao_b, linha_total_b], ignore_index=True)
         for col in ["Budget YTD", "Realizado YTD", "Atraso (USD)"]:
-            df_exibicao_com_total[col] = df_exibicao_com_total[col].map(lambda x: f"$ {x:,.2f}")
+            df_exibicao_com_total_b[col] = df_exibicao_com_total_b[col].map(lambda x: f"$ {x:,.2f}")
         
-        # Transforma em estrutura HTML limpa e injeta a classe CSS
-        table_html_snippet = df_exibicao_com_total.to_html(index=False, classes='data-table')
+        table_html_snippet_budget = df_exibicao_com_total_b.to_html(index=False, classes='data-table')
+        st.dataframe(df_exibicao_com_total_b, use_container_width=True, hide_index=True)
+
+if v_f and v_r and 'df_cross' in locals() and v_f in df_cross.columns and v_r in df_cross.columns:
+    # --- TABELA 2: TOP 20 VS FORECAST ---
+    df_atrasados_f = df_cross[df_cross[v_f] - df_cross[v_r] > 0].copy()
+    df_atrasados_f["Atraso vs Fcast (USD)"] = df_atrasados_f[v_f] - df_atrasados_f[v_r]
+    df_atrasados_f = df_atrasados_f.rename(columns={v_f: "Forecast YTD", v_r: "Realizado YTD"})
+    df_top_20_f = df_atrasados_f.sort_values(by="Atraso vs Fcast (USD)", ascending=False).head(20)
+    
+    st.write("---")
+    st.subheader(f"⚠️ Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD vs. Fcast 2+10 (Até {m_lim})")
+    if df_top_20_f.empty:
+        st.success("✅ Nenhum projeto apresenta desembolso atrasado em relação ao Forecast.")
+        table_html_snippet_forecast = "<p style='color: green; font-weight: bold;'>✅ Nenhum projeto apresenta desembolso atrasado em relação ao Forecast.</p>"
+    else:
+        df_exibicao_f = df_top_20_f[["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Responsável", "Status", "Forecast YTD", "Realizado YTD", "Atraso vs Fcast (USD)"]].copy()
+        total_f_b = df_top_20_f["Forecast YTD"].sum()
+        total_f_r = df_top_20_f["Realizado YTD"].sum()
+        total_f_a = df_top_20_f["Atraso vs Fcast (USD)"].sum()
         
-        # Exibe no Streamlit nativamente
-        st.dataframe(df_exibicao_com_total, use_container_width=True, hide_index=True)
+        linha_total_f = pd.DataFrame([{
+            "Nro_Item Código": "TOTAL DO TOP 20", "Nome do Projeto": "---", "Área": "---", "Planta": "---", "Responsável": "---", "Status": "---",
+            "Forecast YTD": total_f_b, "Realizado YTD": total_f_r, "Atraso vs Fcast (USD)": total_f_a
+        }])
+        
+        df_exibicao_com_total_f = pd.concat([df_exibicao_f, linha_total_f], ignore_index=True)
+        for col in ["Forecast YTD", "Realizado YTD", "Atraso vs Fcast (USD)"]:
+            df_exibicao_com_total_f[col] = df_exibicao_com_total_f[col].map(lambda x: f"$ {x:,.2f}")
+        
+        table_html_snippet_forecast = df_exibicao_com_total_f.to_html(index=False, classes='data-table')
+        st.dataframe(df_exibicao_com_total_f, use_container_width=True, hide_index=True)
 
 # ==========================================
 # PARTE 8: EXPORTAÇÃO EXECUTIVA (HTML) com LOGO e Paleta Azul
@@ -372,7 +412,7 @@ try:
         <style>
             * {{ -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }}
             body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #2b2b2b; margin: 0; padding: 20px; background-color: #fafafa; }}
-            .report-wrapper {{ max-width: 900px; margin: 0 auto; background: #fff; padding: 40px; border: 1px solid #e0e0e0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }}
+            .report-wrapper {{ max-width: 950px; margin: 0 auto; background: #fff; padding: 40px; border: 1px solid #e0e0e0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }}
             .header {{ border-bottom: 3px solid #0066cc; padding-bottom: 12px; margin-bottom: 25px; }}
             .title {{ font-size: 20pt; font-weight: bold; color: #0066cc; text-transform: uppercase; }}
             h2 {{ font-size: 13pt; color: #1a1a1a; margin: 35px 0 15px 0; padding-left: 8px; border-left: 4px solid #0066cc; }}
@@ -380,10 +420,10 @@ try:
             td.kpi-card {{ width: 33.33%; background-color: #f8f9fa !important; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; border-left: 4px solid #336699 !important; }}
             .chart-box {{ background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; margin-bottom: 30px; overflow-x: auto; }}
             
-            /* Estilização Executiva para a Tabela do TOP 20 */
-            table.data-table {{ width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 9.5pt; }}
-            table.data-table th, table.data-table td {{ border: 1px solid #e2e8f0; padding: 10px 12px; text-align: left; }}
-            table.data-table th {{ background-color: #0066cc; color: white; font-weight: bold; text-transform: uppercase; font-size: 8.5pt; letter-spacing: 0.5px; }}
+            /* Estilização Executiva para as Tabelas */
+            table.data-table {{ width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 9pt; }}
+            table.data-table th, table.data-table td {{ border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; }}
+            table.data-table th {{ background-color: #0066cc; color: white; font-weight: bold; text-transform: uppercase; font-size: 8pt; letter-spacing: 0.5px; }}
             table.data-table tr:nth-child(even) {{ background-color: #f8f9fa; }}
             table.data-table tr:hover {{ background-color: #f1f5f9; }}
             table.data-table tr:last-child {{ font-weight: bold; background-color: #edf2f7; border-top: 2px solid #cbd5e1; }}
@@ -414,9 +454,14 @@ try:
             <div class="chart-box">{chart_run_html}</div>
             <div class="chart-box">{chart_pareto_html}</div>
             
-            <h2>3. Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD</h2>
+            <h2>3. Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD vs. Budget</h2>
             <div class="chart-box">
-                {table_html_snippet}
+                {table_html_snippet_budget}
+            </div>
+
+            <h2>4. Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD vs. Fcast 2+10</h2>
+            <div class="chart-box">
+                {table_html_snippet_forecast}
             </div>
         </div>
     </body>
@@ -434,7 +479,7 @@ except Exception as err_export:
 
 with st.expander("🔍 Ver Tabela de Dados Brutos"):
     if 'df_f' in locals() and not df_f.empty:
-        st.write("**Filtros actifs:**", f"Ano Orçamentário: {ano_s} | Período: Jan a {m_lim}")
+        st.write("**Filtros ativos:**", f"Ano Orçamentário: {ano_s} | Período: Jan a {m_lim}")
         df_view = df_f.copy()
         df_view['Val'] = df_view['Val'].map(lambda x: f"$ {x:,.2f}")
         st.dataframe(df_view, use_container_width=True)
