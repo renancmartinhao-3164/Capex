@@ -240,4 +240,165 @@ df_ev['Idx'] = df_ev['Mês'].map({m: i for i, m in enumerate(m_ord)})
 df_ev_sorted = df_ev.sort_values('Idx')
 df_ev_sorted['Label_Txt'] = df_ev_sorted['Val'].map(lambda x: f"${x:,.0f}")
 
-fig_ev = px.line
+fig_ev = px.line(df_ev_sorted, x="Mês", y="Val", color="Versão", markers=True, text="Label_Txt")
+fig_ev.update_traces(textposition='top center')
+fig_ev.update_layout(yaxis_tickformat='$', height=400, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+st.plotly_chart(fig_ev, use_container_width=True)
+
+# =========================================================
+# PARTE 6: GRÁFICOS AVANÇADOS (MATRIZ, PREVISÃO, PARETO)
+# =========================================================
+st.write("---")
+
+if v_b and v_r:
+    # CORREÇÃO CRÍTICA: Trocado df_analise_base por df_f para respeitar o corte de meses YTD (Ex: Jan a Mai)
+    df_cross = df_f.groupby(["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Versão"])["Val"].sum().unstack(level="Versão").fillna(0).reset_index()
+    
+    if v_b in df_cross.columns and v_r in df_cross.columns:
+        df_cross["Atraso (USD)"] = df_cross[v_b] - df_cross[v_r]
+        df_cross["Atingimento %"] = (df_cross[v_r] / df_cross[v_b] * 100).fillna(0).clip(0, 200)
+        
+        st.subheader("🎯 Matriz de Alocação e Criticidade de Desvios")
+        fig_scatter = px.scatter(
+            df_cross[df_cross[v_b] > 0], x=v_b, y="Atraso (USD)", size=v_b, color="Área", hover_name="Nome do Projeto",
+            labels={v_b: "Budget YTD Aprovado (USD)", "Atraso (USD)": "Desvio / Atraso Cumulativo YTD (USD)"}, height=450
+        )
+        fig_scatter.update_layout(plot_bgcolor='#f8f9fa', paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_scatter, use_container_width=True)
+        st.write("---")
+
+        st.subheader("🔮 Análise Preditiva de Fechamento (Run Rate Anual)")
+        n_meses_ytd = m_ord.index(m_lim) + 1
+        gasto_medio_mensal = val_real / n_meses_ytd
+        proj_fim_ano = val_real + (gasto_medio_mensal * (12 - n_meses_ytd))
+        
+        # CORREÇÃO SECUNDÁRIA: Puxando o Budget do ANO COMPLETO para comparar corretamente com a projeção de encerramento do ano
+        val_budg_anual = df_analise_base[df_analise_base["Versão"] == v_b]["Val"].sum() if v_b else 0.0
+        
+        df_runrate = pd.DataFrame({
+            "Métrica de Fechamento": ["Realizado YTD", "Projeção Final de Ano (Run Rate)", "Budget Anual Planejado"],
+            "Valor (USD)": [val_real, proj_fim_ano, val_budg_anual]
+        })
+        fig_run = px.bar(df_runrate, x="Métrica de Fechamento", y="Valor (USD)", text_auto='.2f', color="Métrica de Fechamento", color_discrete_sequence=["#ff2a2a", "#3b7aae", "#343a40"])
+        fig_run.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
+        fig_run.update_layout(yaxis_tickformat='$', showlegend=False, height=400, plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_run, use_container_width=True)
+        st.write("---")
+
+        st.subheader("📊 Concentração de Linhas de Investimento (Pareto TOP 15)")
+        df_pareto = df_cross.groupby("Nome do Projeto")[v_b].sum().reset_index().sort_values(by=v_b, ascending=False)
+        df_pareto["% Acumulado"] = (df_pareto[v_b].cumsum() / df_pareto[v_b].sum() * 100)
+        
+        fig_pareto = px.bar(df_pareto.head(15), x="Nome do Projeto", y=v_b, text_auto='.2f', color_discrete_sequence=cor_graficos)
+        fig_pareto.update_traces(texttemplate='$%{y:,.0f}', textposition='outside')
+        fig_pareto.update_layout(yaxis_tickformat='$', height=450, xaxis_tickangle=-45, plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_pareto, use_container_width=True)
+    else:
+        fig_scatter, fig_run, fig_pareto = None, None, None
+else:
+    fig_scatter, fig_run, fig_pareto = None, None, None
+
+# =========================================================
+# PARTE 7: TABELA ANALÍTICA DE ATRASOS (TOP 20)
+# =========================================================
+st.write("---")
+st.subheader(f"⚠️ Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD (Até {m_lim})")
+
+if v_b and v_r and 'df_cross' in locals() and v_b in df_cross.columns and v_r in df_cross.columns:
+    df_atrasados = df_cross[df_cross["Atraso (USD)"] > 0].copy()
+    df_atrasados = df_atrasados.rename(columns={v_b: "Budget YTD", v_r: "Realizado YTD"})
+    df_top_20 = df_atrasados.sort_values(by="Atraso (USD)", ascending=False).head(20)
+    
+    if df_top_20.empty:
+        st.success("✅ Nenhum projeto apresenta desembolso atrasado em relação ao Budget para os filtros aplicados.")
+    else:
+        df_exibicao = df_top_20[["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Budget YTD", "Realizado YTD", "Atraso (USD)"]].copy()
+        total_b = df_top_20["Budget YTD"].sum()
+        total_r = df_top_20["Realizado YTD"].sum()
+        total_a = df_top_20["Atraso (USD)"].sum()
+        
+        linha_total = pd.DataFrame([{
+            "Nro_Item Código": "TOTAL DO TOP 20", "Nome do Projeto": "---", "Área": "---", "Planta": "---",
+            "Budget YTD": total_b, "Realizado YTD": total_r, "Atraso (USD)": total_a
+        }])
+        
+        df_exibicao_com_total = pd.concat([df_exibicao, Appended_Row if 'Appended_Row' in locals() else linha_total], ignore_index=True)
+        for col in ["Budget YTD", "Realizado YTD", "Atraso (USD)"]:
+            df_exibicao_com_total[col] = df_exibicao_com_total[col].map(lambda x: f"$ {x:,.2f}")
+        
+        st.dataframe(df_exibicao_com_total, use_container_width=True, hide_index=True)
+
+# ==========================================
+# PARTE 8: EXPORTAÇÃO EXECUTIVA (HTML)
+# ==========================================
+st.write("---")
+st.subheader("🖨️ Exportação Completa para Diretoria")
+
+try:
+    chart_main_html = fig_main.to_html(full_html=False, include_plotlyjs='cdn')
+    chart_p_html = fig_p.to_html(full_html=False, include_plotlyjs='cdn')
+    chart_pl_html = fig_pl.to_html(full_html=False, include_plotlyjs='cdn')
+    chart_ev_html = fig_ev.to_html(full_html=False, include_plotlyjs='cdn')
+    
+    chart_scatter_html = fig_scatter.to_html(full_html=False, include_plotlyjs='cdn') if fig_scatter else ""
+    chart_run_html = fig_run.to_html(full_html=False, include_plotlyjs='cdn') if fig_run else ""
+    chart_pareto_html = fig_pareto.to_html(full_html=False, include_plotlyjs='cdn') if fig_pareto else ""
+
+    html_report = f"""
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+    <head>
+        <meta charset="UTF-8">
+        <title>Report Executivo de Capex</title>
+        <style>
+            * {{ -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }}
+            body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #2b2b2b; margin: 0; padding: 20px; background-color: #fafafa; }}
+            .report-wrapper {{ max-width: 900px; margin: 0 auto; background: #fff; padding: 40px; border: 1px solid #e0e0e0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }}
+            .header {{ border-bottom: 3px solid #a11f1f; padding-bottom: 12px; margin-bottom: 25px; }}
+            .title {{ font-size: 20pt; font-weight: bold; color: #a11f1f; text-transform: uppercase; }}
+            h2 {{ font-size: 13pt; color: #1a1a1a; margin: 35px 0 15px 0; padding-left: 8px; border-left: 4px solid #a11f1f; }}
+            table.kpi-table {{ width: 100%; border-collapse: separate; border-spacing: 12px 0; margin: 15px -12px; }}
+            td.kpi-card {{ width: 33.33%; background-color: #f8f9fa !important; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; border-left: 4px solid #a11f1f !important; }}
+            .chart-box {{ background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; margin-bottom: 30px; }}
+        </style>
+    </head>
+    <body>
+        <div class="report-wrapper">
+            <div class="header">
+                <div class="title">Capex - Status Corporativo Global</div>
+                <div>Book Executivo Consolidado — América do Sul — Ano Base {ano_s} (YTD até {m_lim})</div>
+            </div>
+            <table class="kpi-table">
+                <tr>
+                    <td class="kpi-card"><div>REALIZADO YTD</div><div style="font-size:14pt;font-weight:bold;">$ {val_real:,.2f}</div></td>
+                    <td class="kpi-card" style="border-left-color: #0066cc !important;"><div>BUDGET YTD</div><div style="font-size:14pt;font-weight:bold;">$ {val_budg:,.2f}</div></td>
+                    <td class="kpi-card" style="border-left-color: #3b7aae !important;"><div>FORECAST (2+10)</div><div style="font-size:14pt;font-weight:bold;">$ {val_fcast:,.2f}</div></td>
+                </tr>
+            </table>
+            <h2>1. Evolução e Sumário por Estruturas e Sites</h2>
+            <div class="chart-box">{chart_main_html}</div>
+            <div class="chart-box">{chart_p_html}</div>
+            <div class="chart-box">{chart_pl_html}</div>
+            <div class="chart-box">{chart_ev_html}</div>
+        </div>
+    </body>
+    </html>
+    """
+
+    st.download_button(
+        label="📥 Baixar Livro Executivo Ampliado (HTML)",
+        data=html_report,
+        file_name=f"Book_Executivo_Capex_{m_lim}_{ano_s}.html",
+        mime="text/html"
+    )
+except Exception as err_pdf:
+    st.sidebar.error(f"Erro ao injetar gráficos na exportação: {err_pdf}")
+
+# EXPANDER DE SEGURANÇA (DADOS BRUTOS)
+with st.expander("🔍 Ver Tabela de Dados Brutos"):
+    if 'df_f' in locals() and not df_f.empty:
+        st.write("**Filtros ativos:**", f"Ano Orçamentário: {ano_s} | Período: Jan a {m_lim}")
+        df_view = df_f.copy()
+        df_view['Val'] = df_view['Val'].map(lambda x: f"$ {x:,.2f}")
+        st.dataframe(df_view, use_container_width=True)
+        
