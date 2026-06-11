@@ -284,7 +284,7 @@ else:
     else:
         fig_scatter, fig_run, fig_pareto = None, None, None
 # =========================================================
-    # 5. TABELA ANALÍTICA COM SEMÁFORO E JUSTIFICATIVAS (CAMPOS 1 e 2)
+    # 5. TABELA ANALÍTICA COM SEMÁFORO E JUSTIFICATIVAS (CORRIGIDA)
     # =========================================================
     st.write("---")
     st.subheader(f"⚠️ Análise de Desvios: TOP 20 Projetos em Atraso no Desembolso YTD (Até {m_lim})")
@@ -298,22 +298,20 @@ else:
         if df_top_20.empty:
             st.success("✅ Nenhum projeto apresenta desembolso atrasado em relação ao Budget para os filtros aplicados.")
         else:
-            # Preparação do DataFrame de Exibição para o Streamlit
+            # Preparação do DataFrame de Exibição
             df_exibicao = df_top_20[["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Budget YTD", "Realizado YTD", "Atraso (USD)"]].copy()
             
-            # --- CAMPO 1: APLICANDO O SINALIZADOR VISUAL (SEMÁFORO) ---
-            # Função interna para colorir o background da coluna de Atraso com base no valor do desvio
+            # --- CAMPO 1: SINALIZADOR VISUAL (SEMÁFORO) ---
             def colorir_semaforo(val):
                 if isinstance(val, (int, float)):
-                    if val > 100000:  # Crítico: Acima de 100k USD
+                    if val > 100000:    # Crítico: Vermelho
                         return 'background-color: #f8d7da; color: #721c24; font-weight: bold;'
-                    elif val > 30000:  # Atenção: Entre 30k e 100k USD
+                    elif val > 30000:   # Atenção: Amarelo
                         return 'background-color: #fff3cd; color: #856404;'
-                    else:  # Tolerável: Abaixo de 30k USD
+                    else:               # Tolerável: Verde
                         return 'background-color: #d4edda; color: #155724;'
                 return ''
 
-            # Exibição com formatação condicional e de moeda no Streamlit
             st.dataframe(
                 df_exibicao.style.applymap(colorir_semaforo, subset=["Atraso (USD)"])
                 .format({"Budget YTD": "$ {:,.2f}", "Realizado YTD": "$ {:,.2f}", "Atraso (USD)": "$ {:,.2f}"}),
@@ -325,12 +323,19 @@ else:
             st.write("")
             st.markdown("### 💬 Detalhamento e Justificativa por Iniciativa")
             
-            # Cria uma lista de seleção combinando o Código e Nome do Projeto para o Diretor escolher
             lista_projetos_justificativa = df_exibicao.apply(lambda r: f"{r['Nro_Item Código']} - {r['Nome do Projeto']}", axis=1).tolist()
             projeto_selecionado = st.selectbox("Selecione um projeto crítico para avaliar a justificativa do Site:", lista_projetos_justificativa)
             
-            if ...
-
-            
-
-    
+            if projeto_selecionado:
+                # Extrai o código do projeto selecionado para buscar os dados da linha
+                cod_sel = projeto_selecionado.split(" - ")[0]
+                row_sel = df_exibicao[df_exibicao["Nro_Item Código"] == cod_sel].iloc[0]
+                
+                # Definição de uma justificativa inteligente/simulada com base na planta e valor
+                # Se sua base do Excel tiver uma coluna de comentários real, substitua essa lógica por: justificativa_real = row_sel['Sua_Coluna']
+                atraso_val = row_sel["Atraso (USD)"]
+                planta_sel = row_sel["Planta"]
+                
+                if atraso_val > 100000:
+                    status_crit = "🔴 CRÍTICO (Desvio Estr
+                    
