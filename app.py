@@ -195,6 +195,13 @@ val_budg = df_f[df_f["Versão"] == v_b]["Val"].sum() if v_b else 0.0
 val_fcast = df_f[df_f["Versão"] == v_f]["Val"].sum() if v_f else 0.0
 val_real = df_f[df_f["Versão"] == v_r]["Val"].sum() if v_r else 0.0
 
+# --- CÁLCULO DAS VARIAÇÕES (REALIZADO VS BASES) ---
+var_budg_usd = val_real - val_budg
+pct_budg = (var_budg_usd / val_budg * 100) if val_budg > 0 else 0.0
+
+var_fcast_usd = val_real - val_fcast
+pct_fcast = (var_fcast_usd / val_fcast * 100) if val_fcast > 0 else 0.0
+
 col_logo_header, col_title_header = st.columns([1, 6])
 
 with col_logo_header:
@@ -209,13 +216,27 @@ with col_title_header:
 
 st.write("---")
 
+# --- CARTOES DE MÉTRICAS COM AS VARIAÇÕES EMBUTIDAS ---
 col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
 with col_kpi1:
-    st.metric(label="Realizado Acumulado YTD", value=f"USD {val_real:,.2f}")
+    st.metric(
+        label="Realizado Acumulado YTD", 
+        value=f"USD {val_real:,.2f}"
+    )
 with col_kpi2:
-    st.metric(label="Budget Original YTD", value=f"USD {val_budg:,.2f}")
+    st.metric(
+        label="Budget Original YTD", 
+        value=f"USD {val_budg:,.2f}",
+        delta=f"USD {var_budg_usd:,.2f} ({pct_budg:+.2f}%)",
+        delta_color="normal" # Vermelho automático se negativo (subexecução)
+    )
 with col_kpi3:
-    st.metric(label="Forecast Projetado YTD", value=f"USD {val_fcast:,.2f}")
+    st.metric(
+        label="Forecast Projetado YTD (2+10)", 
+        value=f"USD {val_fcast:,.2f}",
+        delta=f"USD {var_fcast_usd:,.2f} ({pct_fcast:+.2f}%)",
+        delta_color="normal"
+    )
 
 # ==========================================
 # PARTE 5: VISUALIZAÇÕES GRÁFICAS STANDARD (Tudo em AZUL)
@@ -403,6 +424,10 @@ try:
     if os.path.exists(ARQUIVO_LOGO):
         logo_base64_html = f'<img src="data:image/jpeg;base64,{get_base64_of_bin_file(ARQUIVO_LOGO)}" style="height:50px;float:left;margin-right:20px;margin-top:-10px;">'
 
+    # Estilização dinâmica das cores de variação no HTML
+    cor_html_b = "#dc3545" if var_budg_usd < 0 else "#28a745"
+    cor_html_f = "#dc3545" if var_fcast_usd < 0 else "#28a745"
+
     html_report = f"""
     <!DOCTYPE html>
     <html lang="pt-BR">
@@ -439,8 +464,16 @@ try:
             <table class="kpi-table">
                 <tr>
                     <td class="kpi-card"><div>REALIZADO YTD</div><div style="font-size:14pt;font-weight:bold;">$ {val_real:,.2f}</div></td>
-                    <td class="kpi-card" style="border-left-color: #0066cc !important;"><div>BUDGET YTD</div><div style="font-size:14pt;font-weight:bold;">$ {val_budg:,.2f}</div></td>
-                    <td class="kpi-card" style="border-left-color: #3b7aae !important;"><div>FORECAST (2+10)</div><div style="font-size:14pt;font-weight:bold;">$ {val_fcast:,.2f}</div></td>
+                    <td class="kpi-card" style="border-left-color: #0066cc !important;">
+                        <div>BUDGET YTD</div>
+                        <div style="font-size:14pt;font-weight:bold;">$ {val_budg:,.2f}</div>
+                        <div style="font-size:9.5pt; font-weight:bold; color:{cor_html_b}; margin-top:4px;">Var: $ {var_budg_usd:,.2f} ({pct_budg:+.2f}%)</div>
+                    </td>
+                    <td class="kpi-card" style="border-left-color: #3b7aae !important;">
+                        <div>FORECAST (2+10)</div>
+                        <div style="font-size:14pt;font-weight:bold;">$ {val_fcast:,.2f}</div>
+                        <div style="font-size:9.5pt; font-weight:bold; color:{cor_html_f}; margin-top:4px;">Var: $ {var_fcast_usd:,.2f} ({pct_fcast:+.2f}%)</div>
+                    </td>
                 </tr>
             </table>
             <h2>1. Evolução e Sumário por Estruturas e Sites</h2>
@@ -479,7 +512,7 @@ except Exception as err_export:
 
 with st.expander("🔍 Ver Tabela de Dados Brutos"):
     if 'df_f' in locals() and not df_f.empty:
-        st.write("**Filtros ativos:**", f"Ano Orçamentário: {ano_s} | Período: Jan a {m_lim}")
+        st.write("**Filtros activos:**", f"Ano Orçamentário: {ano_s} | Período: Jan a {m_lim}")
         df_view = df_f.copy()
         df_view['Val'] = df_view['Val'].map(lambda x: f"$ {x:,.2f}")
         st.dataframe(df_view, use_container_width=True)
