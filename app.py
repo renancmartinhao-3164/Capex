@@ -2,14 +2,6 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
-
-# Configuração da página do Streamlit
-st.set_page_config(page_title="Dashboard de Capex Executivo", layout="wide")
-
-import streamlit as st
-import pandas as pd
-import plotly.express as px
-from datetime import datetime
 import os
 
 # Configuração da página do Streamlit
@@ -26,42 +18,37 @@ origem_dados = st.sidebar.radio(
     options=["Usar Última Base (Servidor)", "Fazer Upload de Novo Arquivo (.xlsx)"]
 )
 
-# Definição do nome do arquivo padrão que fica salvo no servidor/repositório
-ARQUIVO_PADRAO = "capex_update.xlsx"
+# Nome do arquivo padrão que fica salvo no servidor/repositório
+ARQUIVO_PADRAO = "seus_dados_capex.xlsx"
 
 @st.cache_data
 def carregar_dados_excel(file_path_or_buffer):
     return pd.read_excel(file_path_or_buffer)
 
-# Lógica de decisão com base na escolha do usuário
 df_base = None
 
 if origem_dados == "Usar Última Base (Servidor)":
-    # Verifica se o arquivo padrão realmente existe no servidor/GitHub
     if os.path.exists(ARQUIVO_PADRAO):
         try:
             df_base = carregar_dados_excel(ARQUIVO_PADRAO)
-            st.sidebar.success("✅ Base padrão do servidor carregada com sucesso!")
+            st.sidebar.success("✅ Base padrão do servidor carregada!")
         except Exception as e:
-            st.sidebar.error(f"Erro ao ler a base padrão do servidor: {e}")
+            st.sidebar.error(f"Erro ao ler a base padrão: {e}")
             st.stop()
     else:
         st.title("📊 Gestão Estratégica de Investimentos Capex")
         st.error(f"⚠️ O arquivo padrão `{ARQUIVO_PADRAO}` não foi encontrado no servidor.")
-        st.info("Por favor, mude a opção na barra lateral para **'Fazer Upload de Novo Arquivo'** ou verifique se o arquivo está no seu repositório Git.")
+        st.info("Mude a opção na barra lateral para **'Fazer Upload de Novo Arquivo'** ou insira o arquivo no repositório.")
         st.stop()
-
 else:
-    # Caso o usuário prefira subir um arquivo novo
     arquivo_publicado = st.sidebar.file_uploader(
         label="Suba o arquivo Excel de Capex (.xlsx)",
         type=["xlsx"]
-)
-    
+    )
     if arquivo_publicado is not None:
         try:
             df_base = carregar_dados_excel(arquivo_publicado)
-            st.sidebar.success("✅ Novo arquivo processado com sucesso!")
+            st.sidebar.success("✅ Novo arquivo processado!")
         except Exception as e:
             st.sidebar.error(f"Erro ao ler o arquivo enviado: {e}")
             st.stop()
@@ -70,18 +57,69 @@ else:
         st.info("👋 Aguardando importação. Por favor, faça o upload do seu arquivo Excel (.xlsx) na barra lateral esquerda.")
         st.stop()
 
-# --- PADRONIZAÇÃO DA BASE CARREGADA ---
-# Garante que o restante do código funcione independente da opção escolhida acima
+# =========================================================
+# PARTE 2: PADRONIZAÇÃO E DESPIVOTEAMENTO (HORIZONTAl -> VERTICAL)
+# =========================================================
+if df_base is not None:
+    # 1. Remove espaços invisíveis dos nomes das colunas originais
+    df_base.columns = df_base.columns.astype(str).str.strip()
+    
+    # 2. Mapeamento inteligente de colunas fixas para tolerar variações de escrita
+    mapeamento_colunas = {}
+    for col in df_base.columns:
+        col_lower = col.lower()
+        if col_lower in ['versão', 'versao', 'cenário', 'cenario', 'tipo']:
+            mapeamento_colunas[col] = "Versão"
+        elif col_lower in ['planta', 'site', 'unidade', 'filial']:
+            mapeamento_colunas[col] = "Planta"
+        elif col_lower in ['área', 'area', 'diretoria', 'setor']:
+            mapeamento_colunas[col] = "Área"
+        elif col_lower in ['nro_item código', 'código', 'codigo', 'id', 'item']:
+            mapeamento_colunas[col] = "Nro_Item Código"
+        elif col_lower in ['nome do projeto', 'projeto', 'nome', 'descrição', 'descricao']:
+            mapeamento_colunas[col] = "Nome do Projeto"
+            
+    df_base = df_base.rename(columns=mapeamento_colunas)
+
+    # Lista de meses cronológicos esperados como colunas a partir da coluna O
+    m_ord = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+    colunas_meses_encontradas = [m for m in m_ord if m in df_base.columns]
+    colunas_identificadoras = [c for c in ["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Versão"] if c in df_base.columns]
+
+    if colunas_meses_encontradas:
+        # Transforma a estrutura horizontal (meses em colunas) em formato vertical de banco de dados
+        df_base = pd.melt(
+            df_base,
+            id_vars=colunas_identificadoras,
+            value_vars=colunas_meses_encontradas,
+            var_name="Mês",
+            value_name="Val"
+        )
+    else:
+        st.title("📊 Gestão Estratégica de Investimentos Capex")
+        st.error("⚠️ Nenhuma coluna de mês (Jan, Fev, Mar...) foi detectada no arquivo Excel.")
+        st.info(f"Colunas identificadas no arquivo: `{list(df_base.columns)}`")
+        st.stop()
+
+# Validação final de consistência estrutural
+colunas_obrigatorias = ["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Versão", "Mês", "Val"]
+colunas_ausentes = [c for c in colunas_obrigatorias if c not in df_base.columns]
+
+if colunas_ausentes:
+    st.title("📊 Gestão Estratégica de Investimentos Capex")
+    st.error(f"⚠️ Estrutura de campos fixos inconsistente.")
+    st.markdown(f"**Não encontramos os campos:** `{colunas_ausentes}`")
+    st.stop()
+
+# Tratamento final seguro de tipos de dados
 df_base["Versão"] = df_base["Versão"].astype(str).str.strip()
 df_base["Mês"] = df_base["Mês"].astype(str).str.strip()
 df_base["Planta"] = df_base["Planta"].astype(str).str.strip()
 df_base["Área"] = df_base["Área"].astype(str).str.strip()
-
-# Ordem cronológica dos meses para ordenação dos gráficos de linha
-m_ord = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+df_base["Val"] = pd.to_numeric(df_base["Val"], errors='coerce').fillna(0.0)
 
 # ==========================================
-# PARTE 2: FILTROS DA BARRA LATERAL (SIDEBAR)
+# PARTE 3: FILTROS CORPORATIVOS DINÂMICOS
 # ==========================================
 st.sidebar.write("---")
 st.sidebar.header("🎛️ Painel de Controle Regional")
@@ -96,11 +134,10 @@ if not meses_existentes:
     meses_existentes = ["Jan"]
 m_lim = st.sidebar.selectbox("Visão Acumulada (YTD) Até:", meses_existentes, index=len(meses_existentes)-1)
 
-# Determina os meses que entram no cálculo YTD
 idx_limite = m_ord.index(m_lim)
 meses_ytd = m_ord[:idx_limite + 1]
 
-# 3. Filtros de Escopo Estrutural (Plantas e Áreas puxados dinamicamente)
+# 3. Filtros de Escopo (Lidos diretamente dos dados importados)
 plantas_disponiveis = sorted(df_base["Planta"].unique().tolist())
 plantas_sel = st.sidebar.multiselect("Sites / Plantas", plantas_disponiveis, default=plantas_disponiveis)
 
@@ -108,14 +145,16 @@ areas_disponiveis = sorted(df_base["Área"].unique().tolist())
 areas_sel = st.sidebar.multiselect("Áreas de Negócio", areas_disponiveis, default=areas_disponiveis)
 
 # ==========================================
-# PARTE 3: PROCESSAMENTO DOS CORES FINANCEIRAS
+# PARTE 4: PROCESSAMENTO FINANCEIRO CORE
 # ==========================================
+# Filtra aplicando o conceito YTD e escopos de área/site
 df_f = df_base[
     (df_base["Mês"].isin(meses_ytd)) &
     (df_base["Planta"].isin(plantas_sel)) &
     (df_base["Área"].isin(areas_sel))
 ].copy()
 
+# Base total para análises de projetos que dependem do ano cheio
 df_analise_base = df_base[
     (df_base["Planta"].isin(plantas_sel)) &
     (df_base["Área"].isin(areas_sel))
@@ -135,7 +174,7 @@ st.title("📊 Gestão Estratégica de Investimentos Capex")
 st.markdown(f"**Escopo:** Região América do Sul | **Período:** Jan a {m_lim} de {ano_s} *(Visão Acumulada YTD)*")
 st.write("---")
 
-# Exibição dos Blocos de KPI de Alto Nível
+# Exibição dos Cartões de KPI de Alto Nível
 col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
 with col_kpi1:
     st.metric(label="Realizado Acumulado YTD", value=f"USD {val_real:,.2f}")
@@ -145,12 +184,12 @@ with col_kpi3:
     st.metric(label="Forecast Projetado YTD", value=f"USD {val_fcast:,.2f}")
 
 # ==========================================
-# PARTE 4: RENDERIZAÇÃO DOS GRÁFICOS VISUAIS
+# PARTE 5: VISUALIZAÇÕES GRÁFICAS STANDARD
 # ==========================================
 st.write("---")
 cor_graficos = ["#a11f1f"]  # Tom vermelho corporativo
 
-# 1. Gráfico Comparativo Geral de Cenários
+# 1. Comparativo Geral de Versões
 st.subheader(f"📊 Comparativo Geral Capex YTD (Jan a {m_lim}) - USD")
 fig_main = px.bar(df_f.groupby("Versão")["Val"].sum().reset_index(), x="Versão", y="Val", color_discrete_sequence=cor_graficos, text_auto='.2f')
 fig_main.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
@@ -159,7 +198,7 @@ st.plotly_chart(fig_main, use_container_width=True)
 
 st.write("---")
 
-# 2. Gráfico de Cenários Agrupados por Categoria de Projeto
+# 2. Cenários Agrupados por Área de Projeto
 st.subheader("📊 Cenários por Tipo de Categoria de Projeto (Budget vs Forecast vs Realizado)")
 df_proj_ver = df_f.groupby(["Área", "Versão"])["Val"].sum().reset_index()
 fig_p = px.bar(df_proj_ver, x="Área", y="Val", color="Versão", barmode="group", text_auto='.2f')
@@ -169,7 +208,7 @@ st.plotly_chart(fig_p, use_container_width=True)
     
 st.write("---")
 
-# 3. Gráfico de Distribuição Volumétrica por Planta (Site)
+# 3. Distribuição Volumétrica por Planta
 st.subheader("🏢 Distribuição Total de Recursos por Site (Plantas)")
 fig_pl = px.bar(df_f.groupby("Planta")["Val"].sum().reset_index().sort_values("Val", ascending=False), x="Planta", y="Val", color_discrete_sequence=cor_graficos, text_auto='.2f')
 fig_pl.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
@@ -178,7 +217,7 @@ st.plotly_chart(fig_pl, use_container_width=True)
 
 st.write("---")
 
-# 4. Gráfico de Linhas de Evolução Temporal Mensal
+# 4. Evolução Temporal Mensal
 st.subheader("📈 Evolução Mensal Temporal dos Desembolsos")
 df_ev = df_f.groupby(["Mês", "Versão"])["Val"].sum().reset_index()
 df_ev['Idx'] = df_ev['Mês'].map({m: i for i, m in enumerate(m_ord)})
@@ -191,7 +230,7 @@ fig_ev.update_layout(yaxis_tickformat='$', height=400, plot_bgcolor='rgba(0,0,0,
 st.plotly_chart(fig_ev, use_container_width=True)
 
 # =========================================================
-# ADICIONAIS: MATRIZ, PREVISÃO E PARETO
+# PARTE 6: GRÁFICOS AVANÇADOS (MATRIZ, PREVISÃO, PARETO)
 # =========================================================
 st.write("---")
 
@@ -200,8 +239,8 @@ if v_b and v_r:
     df_cross["Atraso (USD)"] = df_cross[v_b] - df_cross[v_r]
     df_cross["Atingimento %"] = (df_cross[v_r] / df_cross[v_b] * 100).fillna(0).clip(0, 200)
     
-    # PROPOSTA 1: Matriz de Criticidade (Scatter Plot)
-    st.subheader("🎯 Proposta 1: Matriz de Alocação e Criticidade de Desvios")
+    # 1. Matriz de Criticidade (Scatter Plot)
+    st.subheader("🎯 Matriz de Alocação e Criticidade de Desvios")
     st.markdown("O quadrante **superior direito** isola os projetos de alto valor com maiores desvios.")
     fig_scatter = px.scatter(
         df_cross[df_cross[v_b] > 0], x=v_b, y="Atraso (USD)", size=v_b, color="Área", hover_name="Nome do Projeto",
@@ -211,8 +250,8 @@ if v_b and v_r:
     st.plotly_chart(fig_scatter, use_container_width=True)
     st.write("---")
 
-    # PROPOSTA 2: Tendência de Fechamento (Run Rate Preditivo)
-    st.subheader("🔮 Proposta 2: Análise Preditiva de Fechamento (Run Rate Anual)")
+    # 2. Tendência de Fechamento (Run Rate Preditivo)
+    st.subheader("🔮 Análise Preditiva de Fechamento (Run Rate Anual)")
     n_meses_ytd = m_ord.index(m_lim) + 1
     gasto_medio_mensal = val_real / n_meses_ytd
     proj_fim_ano = val_real + (gasto_medio_mensal * (12 - n_meses_ytd))
@@ -227,8 +266,8 @@ if v_b and v_r:
     st.plotly_chart(fig_run, use_container_width=True)
     st.write("---")
 
-    # PROPOSTA 3: Princípio de Pareto (Concentração do Orçamento)
-    st.subheader("📊 Proposta 3: Concentração de Linhas de Investimento (Pareto TOP 15)")
+    # 3. Princípio de Pareto (Concentração do Orçamento)
+    st.subheader("📊 Concentração de Linhas de Investimento (Pareto TOP 15)")
     df_pareto = df_cross.groupby("Nome do Projeto")[v_b].sum().reset_index().sort_values(by=v_b, ascending=False)
     df_pareto["% Acumulado"] = (df_pareto[v_b].cumsum() / df_pareto[v_b].sum() * 100)
     
@@ -240,7 +279,7 @@ else:
     fig_scatter, fig_run, fig_pareto = None, None, None
 
 # =========================================================
-# 5. TABELA ANALÍTICA DE ATRASOS (VERSÃO ORIGINAL REORGANIZADA)
+# PARTE 7: TABELA ANALÍTICA DE ATRASOS (TOP 20)
 # =========================================================
 st.write("---")
 st.subheader(f"⚠️ Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD (Até {m_lim})")
@@ -270,7 +309,7 @@ if v_b and v_r and v_b in df_cross.columns:
         st.dataframe(df_exibicao_com_total, use_container_width=True, hide_index=True)
 
 # ==========================================
-# PARTE COMPLEMENTAR: EXPORTAÇÃO EXECUTIVA (PDF/HTML)
+# PARTE 8: EXPORTAÇÃO EXECUTIVA (PDF/HTML)
 # ==========================================
 st.write("---")
 st.subheader("🖨️ Exportação Completa para Diretoria")
@@ -396,9 +435,9 @@ try:
         mime="text/html"
     )
 except Exception as err_pdf:
-    st.sidebar.error(f"Erro ao injetar novos gráficos na exportação: {err_pdf}")
+    st.sidebar.error(f"Erro ao injetar gráficos na exportação: {err_pdf}")
 
-# EXPANDER DE SEGURANÇA (DADOS BRUTOS)
+# EXPANDER DE SEGURANÇA (DADOS BRUTOS VERTICALIZADOS)
 with st.expander("🔍 Ver Tabela de Dados Brutos"):
     if 'df_f' in locals() and not df_f.empty:
         df_view = df_f.copy()
