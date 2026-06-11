@@ -135,7 +135,7 @@ df_analise_base = df_base[
 
 # Mapeamento dinâmico de cenários/versões
 v_nomes = df_f["Versão"].unique()
-v_b = next((v for v in v_nomes if any(x in str(v).lower() for x in ['orc', 'budg', 'prev', 'orça']), None)
+v_b = next((v for v in v_nomes if any(x in str(v).lower() for x in ['orc', 'budg', 'prev', 'orça'])), None)
 v_r = next((v for v in v_nomes if 'real' in str(v).lower()), None)
 v_f = next((v for v in v_nomes if any(x in str(v).lower() for x in ['fore', 'fcast', 'proj'])), None)
 
