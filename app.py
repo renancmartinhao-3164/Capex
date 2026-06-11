@@ -6,33 +6,72 @@ from datetime import datetime
 # Configuração da página do Streamlit
 st.set_page_config(page_title="Dashboard de Capex Executivo", layout="wide")
 
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+from datetime import datetime
+import os
+
+# Configuração da página do Streamlit
+st.set_page_config(page_title="Dashboard de Capex Executivo", layout="wide")
+
 # ==========================================
-# PARTE 1: CARREGAMENTO E TRATAMENTO DE DADOS
+# PARTE 1: CARREGAMENTO DOS DADOS (HÍBRIDO)
 # ==========================================
+st.sidebar.header("📂 Origem dos Dados de Capex")
+
+# Opção para o usuário escolher como deseja carregar a base
+origem_dados = st.sidebar.radio(
+    label="Selecione a fonte dos dados:",
+    options=["Usar Última Base (Servidor)", "Fazer Upload de Novo Arquivo (.xlsx)"]
+)
+
+# Definição do nome do arquivo padrão que fica salvo no servidor/repositório
+ARQUIVO_PADRAO = "seus_dados_capex.xlsx"
+
 @st.cache_data
-def carregar_dados():
-    # Substitua pelo caminho correto do seu arquivo ou banco de dados real
-    # Exemplo: return pd.read_excel("seu_arquivo_capex.xlsx")
+def carregar_dados_excel(file_path_or_buffer):
+    return pd.read_excel(file_path_or_buffer)
+
+# Lógica de decisão com base na escolha do usuário
+df_base = None
+
+if origem_dados == "Usar Última Base (Servidor)":
+    # Verifica se o arquivo padrão realmente existe no servidor/GitHub
+    if os.path.exists(ARQUIVO_PADRAO):
+        try:
+            df_base = carregar_dados_excel(ARQUIVO_PADRAO)
+            st.sidebar.success("✅ Base padrão do servidor carregada com sucesso!")
+        except Exception as e:
+            st.sidebar.error(f"Erro ao ler a base padrão do servidor: {e}")
+            st.stop()
+    else:
+        st.title("📊 Gestão Estratégica de Investimentos Capex")
+        st.error(f"⚠️ O arquivo padrão `{ARQUIVO_PADRAO}` não foi encontrado no servidor.")
+        st.info("Por favor, mude a opção na barra lateral para **'Fazer Upload de Novo Arquivo'** ou verifique se o arquivo está no seu repositório Git.")
+        st.stop()
+
+else:
+    # Caso o usuário prefira subir um arquivo novo
+    arquivo_publicado = st.sidebar.file_uploader(
+        label="Suba o arquivo Excel de Capex (.xlsx)",
+        type=["xlsx"]
+)
     
-    # Massa de teste corrigida: todas as listas possuem exatamente 15 elementos
-    dados_teste = {
-        "Nro_Item Código": [f"PRJ-{i:03d}" for i in range(1, 16)],
-        "Nome do Projeto": [f"Iniciativa de Expansão e Melhoria {i}" for i in range(1, 16)],
-        "Área": ["Manufatura", "Logística", "Engenharia", "Qualidade", "TI"] * 3,
-        "Planta": ["Mogi das Cruzes", "Canoas", "Ibirubá", "Santa Rosa", "Mogi das Cruzes"] * 3,
-        "Versão": ["Budget YTD", "Realizado YTD", "Forecast"] * 5,
-        "Mês": ["Jan", "Fev", "Mar", "Abr", "Mai"] * 3,
-        "Val": [50000, 42000, 48000, 120000, 30000, 95000, 15000, 60000, 22000, 5000, 80000, 45000, 31000, 110000, 25000]
-    }
-    return pd.DataFrame(dados_teste)
+    if arquivo_publicado is not None:
+        try:
+            df_base = carregar_dados_excel(arquivo_publicado)
+            st.sidebar.success("✅ Novo arquivo processado com sucesso!")
+        except Exception as e:
+            st.sidebar.error(f"Erro ao ler o arquivo enviado: {e}")
+            st.stop()
+    else:
+        st.title("📊 Gestão Estratégica de Investimentos Capex")
+        st.info("👋 Aguardando importação. Por favor, faça o upload do seu arquivo Excel (.xlsx) na barra lateral esquerda.")
+        st.stop()
 
-try:
-    df_base = carregar_dados()
-except Exception as e:
-    st.error(f"Erro ao carregar a base de dados: {e}")
-    st.stop()
-
-# Garantir padronização das colunas de texto para evitar falhas de filtros
+# --- PADRONIZAÇÃO DA BASE CARREGADA ---
+# Garante que o restante do código funcione independente da opção escolhida acima
 df_base["Versão"] = df_base["Versão"].astype(str).str.strip()
 df_base["Mês"] = df_base["Mês"].astype(str).str.strip()
 df_base["Planta"] = df_base["Planta"].astype(str).str.strip()
@@ -44,6 +83,7 @@ m_ord = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "
 # ==========================================
 # PARTE 2: FILTROS DA BARRA LATERAL (SIDEBAR)
 # ==========================================
+st.sidebar.write("---")
 st.sidebar.header("🎛️ Painel de Controle Regional")
 
 # 1. Filtro de Ano Base
@@ -60,7 +100,7 @@ m_lim = st.sidebar.selectbox("Visão Acumulada (YTD) Até:", meses_existentes, i
 idx_limite = m_ord.index(m_lim)
 meses_ytd = m_ord[:idx_limite + 1]
 
-# 3. Filtros de Escopo Estrutural (Plantas e Áreas)
+# 3. Filtros de Escopo Estrutural (Plantas e Áreas puxados dinamicamente)
 plantas_disponiveis = sorted(df_base["Planta"].unique().tolist())
 plantas_sel = st.sidebar.multiselect("Sites / Plantas", plantas_disponiveis, default=plantas_disponiveis)
 
