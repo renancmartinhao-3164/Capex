@@ -43,66 +43,52 @@ try:
 except Exception as e:
     st.error(f"Erro ao carregar a base de dados: {e}")
     st.stop()
-    
-# Renomeia para manter compatibilidade com o resto do script do dashboard
-df_base = df_base.rename(columns={
-    col_codigo: "Nro_Item Código",
-    col_nome: "Nome do Projeto",
-    col_versao: "Versão",
-    col_mes: "Mês",
-    col_planta: "Planta",
-    col_area: "Área",
-    col_val: "Val"
-})
 
-# Ordem cronológica dos meses para ordenação dos gráficos de linha
-m_ord = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
-
-# --- BLINDAGEM E PADRONIZAÇÃO DE COLUNAS CORRIGIDA ---
+# --- BLINDAGEM E PADRONIZAÇÃO DE COLUNAS ULTRA-ROBUSTA ---
+# Limpa os nomes das colunas atuais
 df_base.columns = df_base.columns.str.lower().str.strip()
 
-# Mapeamento robusto por palavras-chave (ignora maiúsculas e espaços)
+# Mapeamento por palavras-chave
 col_versao = next((c for c in df_base.columns if any(x in c for x in ['vers', 'cenario', 'cenário', 'tipo'])), None)
 col_mes = next((c for c in df_base.columns if any(x in c for x in ['mês', 'mes', 'periodo', 'período'])), None)
 col_planta = next((c for c in df_base.columns if any(x in c for x in ['plant', 'site', 'filial', 'unidade', 'local'])), None)
 col_area = next((c for c in df_base.columns if any(x in c for x in ['área', 'area', 'setor', 'depto', 'diretoria'])), None)
-
-# Busca exaustiva para a coluna de Código do Projeto
 col_codigo = next((c for c in df_base.columns if any(x in c for x in ['cód', 'cod', 'item', 'id', 'nro', 'número', 'numero'])), None)
-# Se ainda assim não encontrar o código, assume por segurança a primeira coluna da planilha
-if not col_codigo and len(df_base.columns) > 0:
-    col_codigo = df_base.columns[0]
-
 col_nome = next((c for c in df_base.columns if any(x in c for x in ['nome', 'proj', 'desc', 'iniciativa'])), None)
-if not col_nome and len(df_base.columns) > 1:
-    col_nome = df_base.columns[1]
-
 col_val = next((c for c in df_base.columns if any(x in c for x in ['val', 'mont', 'orça', 'real', 'usd', 'gasto', 'vlr'])), None)
-if not col_val and len(df_base.columns) > 2:
-    col_val = df_base.columns[-1] # Assume a última coluna se não achar palavras-chave
 
-# Verificação de segurança para as colunas vitais de filtros estruturais
-if not all([col_versao, col_mes, col_planta, col_area]):
-    st.error("❌ Erro estrutural: A base de dados não possui as colunas necessárias para os filtros (Versão/Cenário, Mês, Planta/Site, Área).")
-    st.markdown(f"**Colunas detectadas na sua planilha:** `{list(df_base.columns)}`")
-    st.stop()
+# Se as colunas vitais de filtros sumirem, damos o mapeamento de segurança baseado em posição
+if not col_versao and len(df_base.columns) > 4: col_versao = df_base.columns[4]
+if not col_mes and len(df_base.columns) > 5: col_mes = df_base.columns[5]
+if not col_planta and len(df_base.columns) > 3: col_planta = df_base.columns[3]
+if not col_area and len(df_base.columns) > 2: col_area = df_base.columns[2]
+if not col_codigo and len(df_base.columns) > 0: col_codigo = df_base.columns[0]
+if not col_nome and len(df_base.columns) > 1: col_nome = df_base.columns[1]
+if not col_val and len(df_base.columns) > 6: col_val = df_base.columns[6]
 
-# Garantir padronização dos textos e evitar falhas de filtros por espaços vazios
-df_base[col_versao] = df_base[col_versao].astype(str).str.strip()
-df_base[col_mes] = df_base[col_mes].astype(str).str.strip()
-df_base[col_planta] = df_base[col_planta].astype(str).str.strip()
-df_base[col_area] = df_base[col_area].astype(str).str.strip()
+# Criamos o dicionário de renomeação dinamicamente, APENAS com chaves válidas (não-None)
+mapeamento_colunas = {}
+if col_codigo: mapeamento_colunas[col_codigo] = "Nro_Item Código"
+if col_nome: mapeamento_colunas[col_nome] = "Nome do Projeto"
+if col_versao: mapeamento_colunas[col_versao] = "Versão"
+if col_mes: mapeamento_colunas[col_mes] = "Mês"
+if col_planta: mapeamento_colunas[col_planta] = "Planta"
+if col_area: mapeamento_colunas[col_area] = "Área"
+if col_val: mapeamento_colunas[col_val] = "Val"
 
-# Renomeia dinamicamente garantindo que strings nulas não quebrem o dicionário
-df_base = df_base.rename(columns={
-    col_codigo: "Nro_Item Código",
-    col_nome: "Nome do Projeto",
-    col_versao: "Versão",
-    col_mes: "Mês",
-    col_planta: "Planta",
-    col_area: "Área",
-    col_val: "Val"
-})
+# Aplica a renomeação com segurança
+df_base = df_base.rename(columns={k: v for k, v in mapeamento_colunas.items() if k is not None})
+
+# Garante que as colunas finais esperadas pelo dashboard existam por fallback (evita quebras abaixo)
+for col_esperada in ["Nro_Item Código", "Nome do Projeto", "Versão", "Mês", "Planta", "Área", "Val"]:
+    if col_esperada not in df_base.columns:
+        df_base[col_esperada] = "Não Informado" if col_esperada != "Val" else 0.0
+
+# Padronização final dos textos de filtros
+df_base["Versão"] = df_base["Versão"].astype(str).str.strip()
+df_base["Mês"] = df_base["Mês"].astype(str).str.strip()
+df_base["Planta"] = df_base["Planta"].astype(str).str.strip()
+df_base["Área"] = df_base["Área"].astype(str).str.strip()
 
 # Ordem cronológica dos meses para ordenação dos gráficos de linha
 m_ord = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
@@ -149,7 +135,7 @@ df_analise_base = df_base[
 
 # Mapeamento dinâmico de cenários/versões
 v_nomes = df_f["Versão"].unique()
-v_b = next((v for v in v_nomes if any(x in str(v).lower() for x in ['orc', 'budg', 'prev'])), None)
+v_b = next((v for v in v_nomes if any(x in str(v).lower() for x in ['orc', 'budg', 'prev', 'orça']), None)
 v_r = next((v for v in v_nomes if 'real' in str(v).lower()), None)
 v_f = next((v for v in v_nomes if any(x in str(v).lower() for x in ['fore', 'fcast', 'proj'])), None)
 
@@ -225,6 +211,11 @@ st.write("---")
 
 if v_b and v_r:
     df_cross = df_analise_base.groupby(["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Versão"])["Val"].sum().unstack(level="Versão").fillna(0).reset_index()
+    
+    # Garante que as colunas de cenário existam na tabela pivotada para evitar KeyError nas operações matemáticas
+    if v_b not in df_cross.columns: df_cross[v_b] = 0.0
+    if v_r not in df_cross.columns: df_cross[v_r] = 0.0
+    
     df_cross["Atraso (USD)"] = df_cross[v_b] - df_cross[v_r]
     df_cross["Atingimento %"] = (df_cross[v_r] / df_cross[v_b] * 100).fillna(0).clip(0, 200)
     
@@ -282,7 +273,7 @@ st.write("---")
 st.subheader(f"⚠️ Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD (Até {m_lim})")
 st.markdown("Rastreabilidade focada nos maiores gaps financeiros. Células coloridas indicam a gravidade do desvio técnico.")
 
-if v_b and v_r and v_b in df_cross.columns:
+if v_b and v_r and 'df_cross' in locals() and v_b in df_cross.columns:
     df_atrasados = df_cross[df_cross["Atraso (USD)"] > 0].copy()
     df_atrasados = df_atrasados.rename(columns={v_b: "Budget YTD", v_r: "Realizado YTD"})
     df_top_20 = df_atrasados.sort_values(by="Atraso (USD)", ascending=False).head(20)
@@ -357,7 +348,6 @@ try:
     chart_run_html = fig_run.to_html(full_html=False, include_plotlyjs='cdn') if fig_run else ""
     chart_pareto_html = fig_pareto.to_html(full_html=False, include_plotlyjs='cdn') if fig_pareto else ""
 
-    # Estrutura inicial do HTML isolada e segura
     html_report = f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -429,7 +419,6 @@ try:
             </thead>
             <tbody>"""
 
-    # Concatenação limpa e segura das linhas da tabela
     if 'df_top_20' in locals() and not df_top_20.empty:
         for _, r in df_top_20.iterrows():
             html_report += f"""
@@ -448,7 +437,6 @@ try:
     else:
         html_report += """<tr><td colspan="7" style="text-align:center;">Nenhum desvio crítico registrado para o período.</td></tr>"""
 
-    # Fechamento seguro do arquivo HTML
     html_report += f"""
             </tbody>
         </table>
@@ -468,3 +456,4 @@ try:
 
 except Exception as exp:
     st.warning(f"Aviso técnico sobre a preparação do book de exportação: {exp}")
+    
