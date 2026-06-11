@@ -11,16 +11,18 @@ st.set_page_config(page_title="Dashboard de Capex Executivo", layout="wide")
 # ==========================================
 @st.cache_data
 def carregar_dados():
-    # Simulação da estrutura de dados para garantir a execução do app
-    # Remova ou comente esta massa de testes quando conectar sua base real
+    # Substitua pelo caminho correto do seu arquivo ou banco de dados real
+    # Exemplo: return pd.read_excel("seu_arquivo_capex.xlsx")
+    
+    # Massa de teste corrigida: todas as listas possuem exatamente 15 elementos
     dados_teste = {
-        "Nro_Item Código": [f"PRJ-{i:03d}" for i in range(1, 30)],
-        "Nome do Projeto": [f"Iniciativa de Expansão e Melhoria {i}" for i in range(1, 30)],
-        "Área": ["Manufatura", "Logística", "Engenharia", "Qualidade", "TI"] * 6,
-        "Planta": ["Mogi das Cruzes", "Canoas", "Ibirubá", "Santa Rosa"] * 7 + ["Mogi das Cruzes"],
-        "Versão": ["Budget YTD", "Realizado YTD", "Forecast"] * 29,
-        "Mês": ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun"] * 14 + ["Jan", "Fev", "Mar", "Abr", "Mai"],
-        "Val": [50000, 42000, 48000, 120000, 30000, 95000, 15000] * 12 + [60000, 22000, 5000]
+        "Nro_Item Código": [f"PRJ-{i:03d}" for i in range(1, 16)],
+        "Nome do Projeto": [f"Iniciativa de Expansão e Melhoria {i}" for i in range(1, 16)],
+        "Área": ["Manufatura", "Logística", "Engenharia", "Qualidade", "TI"] * 3,
+        "Planta": ["Mogi das Cruzes", "Canoas", "Ibirubá", "Santa Rosa", "Mogi das Cruzes"] * 3,
+        "Versão": ["Budget YTD", "Realizado YTD", "Forecast"] * 5,
+        "Mês": ["Jan", "Fev", "Mar", "Abr", "Mai"] * 3,
+        "Val": [50000, 42000, 48000, 120000, 30000, 95000, 15000, 60000, 22000, 5000, 80000, 45000, 31000, 110000, 25000]
     }
     return pd.DataFrame(dados_teste)
 
