@@ -58,6 +58,55 @@ df_base = df_base.rename(columns={
 # Ordem cronológica dos meses para ordenação dos gráficos de linha
 m_ord = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
 
+# --- BLINDAGEM E PADRONIZAÇÃO DE COLUNAS CORRIGIDA ---
+df_base.columns = df_base.columns.str.lower().str.strip()
+
+# Mapeamento robusto por palavras-chave (ignora maiúsculas e espaços)
+col_versao = next((c for c in df_base.columns if any(x in c for x in ['vers', 'cenario', 'cenário', 'tipo'])), None)
+col_mes = next((c for c in df_base.columns if any(x in c for x in ['mês', 'mes', 'periodo', 'período'])), None)
+col_planta = next((c for c in df_base.columns if any(x in c for x in ['plant', 'site', 'filial', 'unidade', 'local'])), None)
+col_area = next((c for c in df_base.columns if any(x in c for x in ['área', 'area', 'setor', 'depto', 'diretoria'])), None)
+
+# Busca exaustiva para a coluna de Código do Projeto
+col_codigo = next((c for c in df_base.columns if any(x in c for x in ['cód', 'cod', 'item', 'id', 'nro', 'número', 'numero'])), None)
+# Se ainda assim não encontrar o código, assume por segurança a primeira coluna da planilha
+if not col_codigo and len(df_base.columns) > 0:
+    col_codigo = df_base.columns[0]
+
+col_nome = next((c for c in df_base.columns if any(x in c for x in ['nome', 'proj', 'desc', 'iniciativa'])), None)
+if not col_nome and len(df_base.columns) > 1:
+    col_nome = df_base.columns[1]
+
+col_val = next((c for c in df_base.columns if any(x in c for x in ['val', 'mont', 'orça', 'real', 'usd', 'gasto', 'vlr'])), None)
+if not col_val and len(df_base.columns) > 2:
+    col_val = df_base.columns[-1] # Assume a última coluna se não achar palavras-chave
+
+# Verificação de segurança para as colunas vitais de filtros estruturais
+if not all([col_versao, col_mes, col_planta, col_area]):
+    st.error("❌ Erro estrutural: A base de dados não possui as colunas necessárias para os filtros (Versão/Cenário, Mês, Planta/Site, Área).")
+    st.markdown(f"**Colunas detectadas na sua planilha:** `{list(df_base.columns)}`")
+    st.stop()
+
+# Garantir padronização dos textos e evitar falhas de filtros por espaços vazios
+df_base[col_versao] = df_base[col_versao].astype(str).str.strip()
+df_base[col_mes] = df_base[col_mes].astype(str).str.strip()
+df_base[col_planta] = df_base[col_planta].astype(str).str.strip()
+df_base[col_area] = df_base[col_area].astype(str).str.strip()
+
+# Renomeia dinamicamente garantindo que strings nulas não quebrem o dicionário
+df_base = df_base.rename(columns={
+    col_codigo: "Nro_Item Código",
+    col_nome: "Nome do Projeto",
+    col_versao: "Versão",
+    col_mes: "Mês",
+    col_planta: "Planta",
+    col_area: "Área",
+    col_val: "Val"
+})
+
+# Ordem cronológica dos meses para ordenação dos gráficos de linha
+m_ord = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+
 # ==========================================
 # PARTE 2: FILTROS DA BARRA LATERAL (SIDEBAR)
 # ==========================================
