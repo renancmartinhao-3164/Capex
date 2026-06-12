@@ -56,7 +56,7 @@ else:
             df_base = carregar_dados_excel(arquivo_publicado)
             st.sidebar.success("✅ Novo arquivo processado!")
         except Exception as e:
-            st.sidebar.error(f"Erro ao ler the arquivo enviado: {e}")
+            st.sidebar.error(f"Erro ao ler o arquivo enviado: {e}")
             st.stop()
     else:
         st.title("📊 Gestão Estratégica de Investimentos Capex")
@@ -95,6 +95,10 @@ if df_base is not None:
         df_base["Responsável"] = "Não Informado"
     if "Status" not in df_base.columns:
         df_base["Status"] = "Não Informado"
+    if "Planta" not in df_base.columns:
+        df_base["Planta"] = "Não Informado"
+    if "Área" not in df_base.columns:
+        df_base["Área"] = "Não Informado"
 
     m_ord = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
     colunas_meses_encontradas = [m for m in m_ord if m in df_base.columns]
@@ -114,7 +118,12 @@ if df_base is not None:
         st.error("⚠️ Nenhuma coluna de mês (Jan, Fev, Mar...) foi detectada no arquivo Excel.")
         st.stop()
 
-df_base = df_base.dropna(subset=["Versão"])
+# Correção Preventiva: Garante que a coluna existe antes do Dropna
+if "Versão" in df_base.columns:
+    df_base = df_base.dropna(subset=["Versão"])
+else:
+    st.error("⚠️ Coluna de cenário/versão não mapeada corretamente.")
+    st.stop()
 
 df_base["Versão"] = df_base["Versão"].astype(str).str.strip()
 df_base["Mês"] = df_base["Mês"].astype(str).str.strip()
@@ -133,8 +142,9 @@ if "Ano" in df_base.columns:
 st.sidebar.write("---")
 st.sidebar.header("🎛️ Painel de Controle Regional")
 
-anos_disponiveis = [2026, 2025]
-ano_s = st.sidebar.selectbox("Ano Base Orçamentário", anos_disponiveis)
+anos_disponiveis = sorted(list(df_base["Ano"].unique())) if "Ano" in df_base.columns else [2026, 2025]
+if 0 in anos_disponiveis: anos_disponiveis.remove(0)
+ano_s = st.sidebar.selectbox("Ano Base Orçamentário", anos_disponiveis, index=0)
 
 meses_existentes = [m for m in m_ord if m in df_base["Mês"].unique()]
 if not meses_existentes:
@@ -200,27 +210,24 @@ pct_budg = (var_budg_usd / val_budg * 100) if val_budg > 0 else 0.0
 var_fcast_usd = val_real - val_fcast
 pct_fcast = (var_fcast_usd / val_fcast * 100) if val_fcast > 0 else 0.0
 
-# --- REGRAS DE NEGÓCIO DE SOMBREAMENTO CONDICIONAL E SETAS ---
-# Regra para o Budget Card
+# --- REGRAS DE NEGÓCIO DE SOMBREAMENTO CONDICIONAL ---
 if var_budg_usd < 0:
-    bg_card_b = "#fce8e6"      # Sombreamento Vermelho Claro
+    bg_card_b = "#fce8e6"      # Vermelho Claro
     cor_texto_b = "#dc3545"    # Texto Vermelho
-    seta_b = "↓"               # Seta para baixo
+    seta_b = "↓"               
 else:
-    bg_card_b = "#e6f4ea"      # Sombreamento Verde Claro
+    bg_card_b = "#e6f4ea"      # Verde Claro
     cor_texto_b = "#28a745"    # Texto Verde
-    seta_b = "↑"               # Seta para cima
+    seta_b = "↑"               
 
-# Regra para o Forecast Card
 if var_fcast_usd < 0:
-    bg_card_f = "#fce8e6"      # Sombreamento Vermelho Claro
-    cor_texto_f = "#dc3545"    # Texto Vermelho
-    seta_f = "↓"               # Seta para baixo
+    bg_card_f = "#fce8e6"      
+    cor_texto_f = "#dc3545"    
+    seta_f = "↓"               
 else:
-    bg_card_f = "#e6f4ea"      # Sombreamento Verde Claro
-    cor_texto_f = "#28a745"    # Texto Verde
-    seta_f = "↑"               # Seta para cima
-
+    bg_card_f = "#e6f4ea"      
+    cor_texto_f = "#28a745"    
+    seta_f = "↑"               
 
 col_logo_header, col_title_header = st.columns([1, 6])
 with col_logo_header:
@@ -235,7 +242,7 @@ with col_title_header:
 
 st.write("---")
 
-# --- CARTOES DE MÉTRICAS EXECUTIVOS COM SOMBREAMENTO CONDICIONAL ---
+# --- CARTOES DE MÉTRICAS EXECUTIVOS ---
 col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
 
 with col_kpi1:
@@ -316,6 +323,8 @@ st.plotly_chart(fig_ev, use_container_width=True)
 # =========================================================
 st.write("---")
 
+fig_scatter, fig_run, fig_pareto = None, None, None
+
 if v_b and v_r:
     df_cross = df_f.groupby(["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Responsável", "Status", "Versão"])["Val"].sum().unstack(level="Versão").fillna(0).reset_index()
     
@@ -350,18 +359,22 @@ if v_b and v_r:
         st.plotly_chart(fig_run, use_container_width=True)
         st.write("---")
 
+        # --- CORREÇÃO DO BUG DO PARETO ---
         st.subheader("📊 Concentração de Linhas de Investimento (Pareto TOP 15)")
         df_pareto = df_cross.groupby("Nome do Projeto")[v_b].sum().reset_index().sort_values(by=v_b, ascending=False)
-        df_pareto["% Acumulado"] = (df_pareto[v_b].cumsum() / df_pareto[v_b].sum() * 100)
         
-        fig_pareto = px.bar(df_pareto.head(15), x="Nome do Projeto", y=v_b, text_auto='.2f', color_discrete_sequence=cor_graficos)
+        # Criando o gráfico clássico de Pareto (Barras do Budget do Projeto)
+        fig_pareto = px.bar(
+            df_pareto.head(15), 
+            x="Nome do Projeto", 
+            y=v_b, 
+            text_auto='.0f', 
+            color_discrete_sequence=cor_graficos,
+            labels={v_b: "Budget YTD (USD)"}
+        )
         fig_pareto.update_traces(texttemplate='$%{y:,.0f}', textposition='outside')
         fig_pareto.update_layout(yaxis_tickformat='$', height=450, xaxis_tickangle=-45, plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig_pareto, use_container_width=True)
-    else:
-        fig_scatter, fig_run, fig_pareto = None, None, None
-else:
-    fig_scatter, fig_run, fig_pareto = None, None, None
 
 # =========================================================
 # PARTE 7: TABELAS ANALÍTICAS DE ATRASOS (TOP 20)
@@ -393,10 +406,11 @@ if v_b and v_r and 'df_cross' in locals() and v_b in df_cross.columns and v_r in
         }])
         
         df_exibicao_com_total_b = pd.concat([df_exibicao_b, linha_total_b], ignore_index=True)
+        table_html_snippet_budget = df_exibicao_com_total_b.to_html(index=False, classes='data-table')
+        
+        # Mapeamento estético para exibição na tela do Streamlit
         for col in ["Budget YTD", "Realizado YTD", "Atraso (USD)"]:
             df_exibicao_com_total_b[col] = df_exibicao_com_total_b[col].map(lambda x: f"$ {x:,.2f}")
-        
-        table_html_snippet_budget = df_exibicao_com_total_b.to_html(index=False, classes='data-table')
         st.dataframe(df_exibicao_com_total_b, use_container_width=True, hide_index=True)
 
 if v_f and v_r and 'df_cross' in locals() and v_f in df_cross.columns and v_r in df_cross.columns:
@@ -422,27 +436,28 @@ if v_f and v_r and 'df_cross' in locals() and v_f in df_cross.columns and v_r in
         }])
         
         df_exibicao_com_total_f = pd.concat([df_exibicao_f, linha_total_f], ignore_index=True)
+        table_html_snippet_forecast = df_exibicao_com_total_f.to_html(index=False, classes='data-table')
+        
         for col in ["Forecast YTD", "Realizado YTD", "Atraso vs Fcast (USD)"]:
             df_exibicao_com_total_f[col] = df_exibicao_com_total_f[col].map(lambda x: f"$ {x:,.2f}")
-        
-        table_html_snippet_forecast = df_exibicao_com_total_f.to_html(index=False, classes='data-table')
         st.dataframe(df_exibicao_com_total_f, use_container_width=True, hide_index=True)
 
 # ==========================================
-# PARTE 8: EXPORTAÇÃO EXECUTIVA (HTML)
+# PARTE 8: EXPORTAÇÃO EXECUTIVA (HTML OTIMIZADA)
 # ==========================================
 st.write("---")
 st.subheader("🖨️ Exportação Completa para Diretoria")
 
 try:
+    # OTIMIZAÇÃO: include_plotlyjs='cdn' apenas no primeiro gráfico para reduzir o peso do HTML final
     chart_main_html = fig_main.to_html(full_html=False, include_plotlyjs='cdn')
-    chart_p_html = fig_p.to_html(full_html=False, include_plotlyjs='cdn')
-    chart_pl_html = fig_pl.to_html(full_html=False, include_plotlyjs='cdn')
-    chart_ev_html = fig_ev.to_html(full_html=False, include_plotlyjs='cdn')
+    chart_p_html = fig_p.to_html(full_html=False, include_plotlyjs=False)
+    chart_pl_html = fig_pl.to_html(full_html=False, include_plotlyjs=False)
+    chart_ev_html = fig_ev.to_html(full_html=False, include_plotlyjs=False)
     
-    chart_scatter_html = fig_scatter.to_html(full_html=False, include_plotlyjs='cdn') if fig_scatter else ""
-    chart_run_html = fig_run.to_html(full_html=False, include_plotlyjs='cdn') if fig_run else ""
-    chart_pareto_html = fig_pareto.to_html(full_html=False, include_plotlyjs='cdn') if fig_pareto else ""
+    chart_scatter_html = fig_scatter.to_html(full_html=False, include_plotlyjs=False) if fig_scatter else ""
+    chart_run_html = fig_run.to_html(full_html=False, include_plotlyjs=False) if fig_run else ""
+    chart_pareto_html = fig_pareto.to_html(full_html=False, include_plotlyjs=False) if fig_pareto else ""
 
     logo_base64_html = ""
     if os.path.exists(ARQUIVO_LOGO):
