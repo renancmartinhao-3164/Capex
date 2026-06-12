@@ -298,7 +298,7 @@ st.plotly_chart(fig_p, use_container_width=True)
     
 st.write("---")
 
-# --- AJUSTE SOLICITADO: GRÁFICO DE SITES LADO A LADO ---
+# --- GRÁFICO DE SITES CONFIRMADO (GRUPADO LADO A LADO) ---
 st.subheader("🏢 Distribuição de Recursos por Site / Planta (Budget vs Forecast vs Realizado)")
 df_planta_ver = df_f.groupby(["Planta", "Versão"])["Val"].sum().reset_index()
 
@@ -421,7 +421,7 @@ if v_b and v_r and 'df_cross' in locals() and v_b in df_cross.columns and v_r in
             "Budget YTD": total_b, "Realizado YTD": total_r, "Atraso (USD)": total_a
         }])
         
-        df_exibicao_com_total_b = pd.concat([df_exibicao_b, linea_total_b if 'linea_total_b' in locals() else linha_total_b], ignore_index=True)
+        df_exibicao_com_total_b = pd.concat([df_exibicao_b, linha_total_b], ignore_index=True)
         table_html_snippet_budget = df_exibicao_com_total_b.to_html(index=False, classes='data-table')
         
         for col in ["Budget YTD", "Realizado YTD", "Atraso (USD)"]:
@@ -489,4 +489,75 @@ try:
             .report-wrapper {{ max-width: 950px; margin: 0 auto; background: #fff; padding: 40px; border: 1px solid #e0e0e0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }}
             .header {{ border-bottom: 3px solid #0066cc; padding-bottom: 12px; margin-bottom: 25px; }}
             .title {{ font-size: 20pt; font-weight: bold; color: #0066cc; text-transform: uppercase; }}
-    
+            h2 {{ font-size: 13pt; color: #1a1a1a; margin: 35px 0 15px 0; padding-left: 8px; border-left: 4px solid #0066cc; }}
+            table.kpi-table {{ width: 100%; border-collapse: separate; border-spacing: 12px 0; margin: 15px -12px; }}
+            td.kpi-card {{ width: 33.33%; background-color: #f8f9fa !important; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; border-left: 5px solid #336699 !important; }}
+            .chart-box {{ background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; margin-bottom: 30px; overflow-x: auto; }}
+            
+            table.data-table {{ width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 9pt; }}
+            table.data-table th, table.data-table td {{ border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; }}
+            table.data-table th {{ background-color: #0066cc; color: white; font-weight: bold; text-transform: uppercase; font-size: 8pt; letter-spacing: 0.5px; }}
+            table.data-table tr:nth-child(even) {{ background-color: #f8f9fa; }}
+            table.data-table tr:hover {{ background-color: #f1f5f9; }}
+            table.data-table tr:last-child {{ font-weight: bold; background-color: #edf2f7; border-top: 2px solid #cbd5e1; }}
+        </style>
+    </head>
+    <body>
+        <div class="report-wrapper">
+            <div class="header">
+                {logo_base64_html}
+                <div class="title">Capex - Status Corporativo Global</div>
+                <div>Book Executivo Consolidado — América do Sul — Ano Base {ano_s} (YTD até {m_lim})</div>
+            </div>
+            <table class="kpi-table">
+                <tr>
+                    <td class="kpi-card"><div>REALIZADO YTD</div><div style="font-size:14pt;font-weight:bold;">$ {val_real:,.2f}</div></td>
+                    <td class="kpi-card" style="background-color: {bg_card_b} !important; border-left-color: {cor_texto_b} !important;">
+                        <div>BUDGET YTD</div>
+                        <div style="font-size:14pt;font-weight:bold;">$ {val_budg:,.2f}</div>
+                        <div style="font-size:9.5pt; font-weight:bold; color:{cor_texto_b}; margin-top:4px;">{seta_b} Var: $ {var_budg_usd:,.2f} ({pct_budg:+.2f}%)</div>
+                    </td>
+                    <td class="kpi-card" style="background-color: {bg_card_f} !important; border-left-color: {cor_texto_f} !important;">
+                        <div>FORECAST (2+10)</div>
+                        <div style="font-size:14pt;font-weight:bold;">$ {val_fcast:,.2f}</div>
+                        <div style="font-size:9.5pt; font-weight:bold; color:{cor_texto_f}; margin-top:4px;">{seta_f} Var: $ {var_fcast_usd:,.2f} ({pct_fcast:+.2f}%)</div>
+                    </td>
+                </tr>
+            </table>
+            <h2>1. Evolução e Sumário por Estruturas e Sites</h2>
+            <div class="chart-box">{chart_main_html}</div>
+            <div class="chart-box">{chart_p_html}</div>
+            <div class="chart-box">{chart_pl_html}</div>
+            <div class="chart-box">{chart_ev_html}</div>
+            
+            <h2>2. Análises Avançadas de Risco e Concentração</h2>
+            <div class="chart-box">{chart_scatter_html}</div>
+            <div class="chart-box">{chart_run_html}</div>
+            <div class="chart-box">{chart_pareto_html}</div>
+            
+            <h2>3. Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD vs. Budget</h2>
+            <div class="chart-box">{table_html_snippet_budget}</div>
+
+            <h2>4. Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD vs. Fcast 2+10</h2>
+            <div class="chart-box">{table_html_snippet_forecast}</div>
+        </div>
+    </body>
+    </html>
+    """
+
+    st.download_button(
+        label="📥 Baixar Livro Executivo Ampliado (HTML)",
+        data=html_report,
+        file_name=f"Book_Executivo_Capex_{m_lim}_{ano_s}.html",
+        mime="text/html"
+    )
+except Exception as err_export:
+    st.sidebar.error(f"Erro ao injetar gráficos na exportação: {err_export}")
+
+with st.expander("🔍 Ver Tabela de Dados Brutos"):
+    if 'df_f' in locals() and not df_f.empty:
+        st.write("**Filtros activos:**", f"Ano Orçamentário: {ano_s} | Período: Jan a {m_lim}")
+        df_view = df_f.copy()
+        df_view['Val'] = df_view['Val'].map(lambda x: f"$ {x:,.2f}")
+        st.dataframe(df_view, use_container_width=True)
+        
