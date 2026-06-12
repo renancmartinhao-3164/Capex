@@ -118,7 +118,6 @@ if df_base is not None:
         st.error("⚠️ Nenhuma coluna de mês (Jan, Fev, Mar...) foi detectada no arquivo Excel.")
         st.stop()
 
-# Correção Preventiva: Garante que a coluna existe antes do Dropna
 if "Versão" in df_base.columns:
     df_base = df_base.dropna(subset=["Versão"])
 else:
@@ -212,12 +211,12 @@ pct_fcast = (var_fcast_usd / val_fcast * 100) if val_fcast > 0 else 0.0
 
 # --- REGRAS DE NEGÓCIO DE SOMBREAMENTO CONDICIONAL ---
 if var_budg_usd < 0:
-    bg_card_b = "#fce8e6"      # Vermelho Claro
-    cor_texto_b = "#dc3545"    # Texto Vermelho
+    bg_card_b = "#fce8e6"      
+    cor_texto_b = "#dc3545"    
     seta_b = "↓"               
 else:
-    bg_card_b = "#e6f4ea"      # Verde Claro
-    cor_texto_b = "#28a745"    # Texto Verde
+    bg_card_b = "#e6f4ea"      
+    cor_texto_b = "#28a745"    
     seta_b = "↑"               
 
 if var_fcast_usd < 0:
@@ -276,12 +275,33 @@ with col_kpi3:
         </div>
     """, unsafe_allow_html=True)
 
-st.subheader("🏢 Distribuição de Recursos por Site / Planta (Budget vs Forecast vs Realizado)")
+# ==========================================
+# PARTE 5: VISUALIZAÇÕES GRÁFICAS STANDARD
+# ==========================================
+st.write("---")
+cor_graficos = ["#0066cc"]
 
-# 1. Agrupamos por Planta E Versão para separar os cenários
+st.subheader(f"📊 Comparativo Geral Capex YTD (Jan a {m_lim}) - USD")
+fig_main = px.bar(df_f.groupby("Versão")["Val"].sum().reset_index(), x="Versão", y="Val", color_discrete_sequence=cor_graficos, text_auto='.2f')
+fig_main.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
+fig_main.update_layout(yaxis_tickformat='$', height=400, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+st.plotly_chart(fig_main, use_container_width=True)
+
+st.write("---")
+
+st.subheader("📊 Cenários por Tipo de Categoria de Projeto (Budget vs Forecast vs Realizado)")
+df_proj_ver = df_f.groupby(["Área", "Versão"])["Val"].sum().reset_index()
+fig_p = px.bar(df_proj_ver, x="Área", y="Val", color="Versão", barmode="group", text_auto='.2f', color_discrete_sequence=px.colors.qualitative.Plotly_r)
+fig_p.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
+fig_p.update_layout(yaxis_tickformat='$', xaxis_title="Tipo / Área de Projeto", legend_title="Cenário", xaxis={'categoryorder':'total descending'}, height=450, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+st.plotly_chart(fig_p, use_container_width=True)
+    
+st.write("---")
+
+# --- AJUSTE SOLICITADO: GRÁFICO DE SITES LADO A LADO ---
+st.subheader("🏢 Distribuição de Recursos por Site / Planta (Budget vs Forecast vs Realizado)")
 df_planta_ver = df_f.groupby(["Planta", "Versão"])["Val"].sum().reset_index()
 
-# 2. Criamos o gráfico com barras agrupadas (lado a lado) utilizando a cor para diferenciar as Versões
 fig_pl = px.bar(
     df_planta_ver, 
     x="Planta", 
@@ -291,8 +311,6 @@ fig_pl = px.bar(
     text_auto='.2f', 
     color_discrete_sequence=px.colors.qualitative.Plotly_r
 )
-
-# 3. Formatação executiva das labels e layout
 fig_pl.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
 fig_pl.update_layout(
     yaxis_tickformat='$', 
@@ -303,8 +321,20 @@ fig_pl.update_layout(
     plot_bgcolor='rgba(0,0,0,0)', 
     paper_bgcolor='rgba(0,0,0,0)'
 )
-
 st.plotly_chart(fig_pl, use_container_width=True)
+
+st.write("---")
+
+st.subheader("📈 Evolução Mensal Temporal dos Desembolsos")
+df_ev = df_f.groupby(["Mês", "Versão"])["Val"].sum().reset_index()
+df_ev['Idx'] = df_ev['Mês'].map({m: i for i, m in enumerate(m_ord)})
+df_ev_sorted = df_ev.sort_values('Idx')
+df_ev_sorted['Label_Txt'] = df_ev_sorted['Val'].map(lambda x: f"${x:,.0f}")
+
+fig_ev = px.line(df_ev_sorted, x="Mês", y="Val", color="Versão", markers=True, text="Label_Txt", color_discrete_sequence=px.colors.qualitative.Plotly_r)
+fig_ev.update_traces(textposition='top center')
+fig_ev.update_layout(yaxis_tickformat='$', height=400, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+st.plotly_chart(fig_ev, use_container_width=True)
 
 # =========================================================
 # PARTE 6: GRÁFICOS AVANÇADOS (MATRIZ, PREVISÃO, PARETO)
@@ -347,11 +377,9 @@ if v_b and v_r:
         st.plotly_chart(fig_run, use_container_width=True)
         st.write("---")
 
-        # --- CORREÇÃO DO BUG DO PARETO ---
         st.subheader("📊 Concentração de Linhas de Investimento (Pareto TOP 15)")
         df_pareto = df_cross.groupby("Nome do Projeto")[v_b].sum().reset_index().sort_values(by=v_b, ascending=False)
         
-        # Criando o gráfico clássico de Pareto (Barras do Budget do Projeto)
         fig_pareto = px.bar(
             df_pareto.head(15), 
             x="Nome do Projeto", 
@@ -393,10 +421,9 @@ if v_b and v_r and 'df_cross' in locals() and v_b in df_cross.columns and v_r in
             "Budget YTD": total_b, "Realizado YTD": total_r, "Atraso (USD)": total_a
         }])
         
-        df_exibicao_com_total_b = pd.concat([df_exibicao_b, linha_total_b], ignore_index=True)
+        df_exibicao_com_total_b = pd.concat([df_exibicao_b, linea_total_b if 'linea_total_b' in locals() else linha_total_b], ignore_index=True)
         table_html_snippet_budget = df_exibicao_com_total_b.to_html(index=False, classes='data-table')
         
-        # Mapeamento estético para exibição na tela do Streamlit
         for col in ["Budget YTD", "Realizado YTD", "Atraso (USD)"]:
             df_exibicao_com_total_b[col] = df_exibicao_com_total_b[col].map(lambda x: f"$ {x:,.2f}")
         st.dataframe(df_exibicao_com_total_b, use_container_width=True, hide_index=True)
@@ -437,7 +464,6 @@ st.write("---")
 st.subheader("🖨️ Exportação Completa para Diretoria")
 
 try:
-    # OTIMIZAÇÃO: include_plotlyjs='cdn' apenas no primeiro gráfico para reduzir o peso do HTML final
     chart_main_html = fig_main.to_html(full_html=False, include_plotlyjs='cdn')
     chart_p_html = fig_p.to_html(full_html=False, include_plotlyjs=False)
     chart_pl_html = fig_pl.to_html(full_html=False, include_plotlyjs=False)
@@ -463,75 +489,4 @@ try:
             .report-wrapper {{ max-width: 950px; margin: 0 auto; background: #fff; padding: 40px; border: 1px solid #e0e0e0; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }}
             .header {{ border-bottom: 3px solid #0066cc; padding-bottom: 12px; margin-bottom: 25px; }}
             .title {{ font-size: 20pt; font-weight: bold; color: #0066cc; text-transform: uppercase; }}
-            h2 {{ font-size: 13pt; color: #1a1a1a; margin: 35px 0 15px 0; padding-left: 8px; border-left: 4px solid #0066cc; }}
-            table.kpi-table {{ width: 100%; border-collapse: separate; border-spacing: 12px 0; margin: 15px -12px; }}
-            td.kpi-card {{ width: 33.33%; background-color: #f8f9fa !important; border: 1px solid #e9ecef; border-radius: 6px; padding: 14px; border-left: 5px solid #336699 !important; }}
-            .chart-box {{ background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; margin-bottom: 30px; overflow-x: auto; }}
-            
-            table.data-table {{ width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 9pt; }}
-            table.data-table th, table.data-table td {{ border: 1px solid #e2e8f0; padding: 8px 10px; text-align: left; }}
-            table.data-table th {{ background-color: #0066cc; color: white; font-weight: bold; text-transform: uppercase; font-size: 8pt; letter-spacing: 0.5px; }}
-            table.data-table tr:nth-child(even) {{ background-color: #f8f9fa; }}
-            table.data-table tr:hover {{ background-color: #f1f5f9; }}
-            table.data-table tr:last-child {{ font-weight: bold; background-color: #edf2f7; border-top: 2px solid #cbd5e1; }}
-        </style>
-    </head>
-    <body>
-        <div class="report-wrapper">
-            <div class="header">
-                {logo_base64_html}
-                <div class="title">Capex - Status Corporativo Global</div>
-                <div>Book Executivo Consolidado — América do Sul — Ano Base {ano_s} (YTD até {m_lim})</div>
-            </div>
-            <table class="kpi-table">
-                <tr>
-                    <td class="kpi-card"><div>REALIZADO YTD</div><div style="font-size:14pt;font-weight:bold;">$ {val_real:,.2f}</div></td>
-                    <td class="kpi-card" style="background-color: {bg_card_b} !important; border-left-color: {cor_texto_b} !important;">
-                        <div>BUDGET YTD</div>
-                        <div style="font-size:14pt;font-weight:bold;">$ {val_budg:,.2f}</div>
-                        <div style="font-size:9.5pt; font-weight:bold; color:{cor_texto_b}; margin-top:4px;">{seta_b} Var: $ {var_budg_usd:,.2f} ({pct_budg:+.2f}%)</div>
-                    </td>
-                    <td class="kpi-card" style="background-color: {bg_card_f} !important; border-left-color: {cor_texto_f} !important;">
-                        <div>FORECAST (2+10)</div>
-                        <div style="font-size:14pt;font-weight:bold;">$ {val_fcast:,.2f}</div>
-                        <div style="font-size:9.5pt; font-weight:bold; color:{cor_texto_f}; margin-top:4px;">{seta_f} Var: $ {var_fcast_usd:,.2f} ({pct_fcast:+.2f}%)</div>
-                    </td>
-                </tr>
-            </table>
-            <h2>1. Evolução e Sumário por Estruturas e Sites</h2>
-            <div class="chart-box">{chart_main_html}</div>
-            <div class="chart-box">{chart_p_html}</div>
-            <div class="chart-box">{chart_pl_html}</div>
-            <div class="chart-box">{chart_ev_html}</div>
-            
-            <h2>2. Análises Avançadas de Risco e Concentração</h2>
-            <div class="chart-box">{chart_scatter_html}</div>
-            <div class="chart-box">{chart_run_html}</div>
-            <div class="chart-box">{chart_pareto_html}</div>
-            
-            <h2>3. Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD vs. Budget</h2>
-            <div class="chart-box">{table_html_snippet_budget}</div>
-
-            <h2>4. Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD vs. Fcast 2+10</h2>
-            <div class="chart-box">{table_html_snippet_forecast}</div>
-        </div>
-    </body>
-    </html>
-    """
-
-    st.download_button(
-        label="📥 Baixar Livro Executivo Ampliado (HTML)",
-        data=html_report,
-        file_name=f"Book_Executivo_Capex_{m_lim}_{ano_s}.html",
-        mime="text/html"
-    )
-except Exception as err_export:
-    st.sidebar.error(f"Erro ao injetar gráficos na exportação: {err_export}")
-
-with st.expander("🔍 Ver Tabela de Dados Brutos"):
-    if 'df_f' in locals() and not df_f.empty:
-        st.write("**Filtros activos:**", f"Ano Orçamentário: {ano_s} | Período: Jan a {m_lim}")
-        df_view = df_f.copy()
-        df_view['Val'] = df_view['Val'].map(lambda x: f"$ {x:,.2f}")
-        st.dataframe(df_view, use_container_width=True)
-        
+    
