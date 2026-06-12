@@ -19,13 +19,12 @@ origem_dados = st.sidebar.radio(
 )
 
 ARQUIVO_PADRAO = "seus_dados_capex.xlsx"
-ARQUIVO_LOGO = "logo.jpg" # Define o nome do arquivo de logo
+ARQUIVO_LOGO = "logo.jpg" 
 
 @st.cache_data
 def carregar_dados_excel(file_path_or_buffer):
     return pd.read_excel(file_path_or_buffer)
 
-# Função para converter imagem para base64 para embutir no HTML
 def get_base64_of_bin_file(bin_file):
     with open(bin_file, 'rb') as f:
         data = f.read()
@@ -209,7 +208,22 @@ pct_budg = (var_budg_usd / val_budg * 100) if val_budg > 0 else 0.0
 var_fcast_usd = val_real - val_fcast
 pct_fcast = (var_fcast_usd / val_fcast * 100) if val_fcast > 0 else 0.0
 
-# --- REGRAS DE NEGÓCIO DE SOMBREAMENTO CONDICIONAL ---
+# --- NOVO SISTEMA DINÂMICO DE CORES EXECUTIVAS ---
+CINZA_BUDGET = "#808080"
+PRETO_FORECAST = "#000000"
+VERDE_REALIZADO = "#056608"  # Verde Escuro (Acima do Forecast)
+VERMELHO_REALIZADO = "#8B0000"  # Vermelho Escuro (Abaixo do Forecast)
+
+# Mapeamento estático inicial para Budget e Forecast
+MAPA_CORES_CENARIO = {}
+if v_b: MAPA_CORES_CENARIO[v_b] = CINZA_BUDGET
+if v_f: MAPA_CORES_CENARIO[v_f] = PRETO_FORECAST
+
+# Determinação da cor do realizado global baseado nas métricas acumuladas totais
+cor_realizado_global = VERDE_REALIZADO if val_real >= val_fcast else VERMELHO_REALIZADO
+if v_r: MAPA_CORES_CENARIO[v_r] = cor_realizado_global
+
+# Configuração dos cards executivos
 if var_budg_usd < 0:
     bg_card_b = "#fce8e6"      
     cor_texto_b = "#dc3545"    
@@ -246,10 +260,10 @@ col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
 
 with col_kpi1:
     st.markdown(f"""
-        <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-left: 5px solid #336699; border-radius: 6px; padding: 16px; min-height: 100px;">
+        <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-left: 5px solid {cor_realizado_global}; border-radius: 6px; padding: 16px; min-height: 100px;">
             <div style="font-size: 10pt; color: #555555; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">Realizado Acumulado YTD</div>
-            <div style="font-size: 18pt; font-weight: bold; color: #1a1a1a; margin-top: 6px;">USD {val_real:,.2f}</div>
-            <div style="font-size: 9.5pt; color: #777777; margin-top: 4px;">Execução física/financeira ativa</div>
+            <div style="font-size: 18pt; font-weight: bold; color: {cor_realizado_global}; margin-top: 6px;">USD {val_real:,.2f}</div>
+            <div style="font-size: 9.5pt; color: #777777; margin-top: 4px;">Execução com base nas metas de Forecast</div>
         </div>
     """, unsafe_allow_html=True)
 
@@ -279,48 +293,95 @@ with col_kpi3:
 # PARTE 5: VISUALIZAÇÕES GRÁFICAS STANDARD
 # ==========================================
 st.write("---")
-cor_graficos = ["#0066cc"]
 
 st.subheader(f"📊 Comparativo Geral Capex YTD (Jan a {m_lim}) - USD")
-fig_main = px.bar(df_f.groupby("Versão")["Val"].sum().reset_index(), x="Versão", y="Val", color_discrete_sequence=cor_graficos, text_auto='.2f')
+fig_main = px.bar(
+    df_f.groupby("Versão")["Val"].sum().reset_index(), 
+    x="Versão", 
+    y="Val", 
+    color="Versão", 
+    color_discrete_map=MAPA_CORES_CENARIO, 
+    text_auto='.2f'
+)
 fig_main.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
-fig_main.update_layout(yaxis_tickformat='$', height=400, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+fig_main.update_layout(yaxis_tickformat='$', showlegend=False, height=400, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
 st.plotly_chart(fig_main, use_container_width=True)
 
 st.write("---")
 
+# --- PROCESSAMENTO DE CORES CONDICIONAIS DINÂMICAS PARA GRÁFICOS QUEBRADOS ---
+# Para os gráficos agrupados por Área e Planta, calculamos a relação Realizado vs Forecast de cada categoria para aplicar a cor cirurgicamente.
 st.subheader("📊 Cenários por Tipo de Categoria de Projeto (Budget vs Forecast vs Realizado)")
-df_proj_ver = df_f.groupby(["Área", "Versão"])["Val"].sum().reset_index()
-fig_p = px.bar(df_proj_ver, x="Área", y="Val", color="Versão", barmode="group", text_auto='.2f', color_discrete_sequence=px.colors.qualitative.Plotly_r)
+df_proj_ver = df_f.groupby(["Área", "Versão"])["Val"].sum().unstack(level="Versão").fillna(0).reset_index()
+
+df_proj_melted = pd.melt(df_proj_ver, id_vars=["Área"], value_vars=[v for v in [v_b, v_f, v_r] if v in df_proj_ver.columns], var_name="Versão", value_name="Val")
+
+# Injeção da coluna de cor dinâmica por linha
+def calcular_cor_dinamica_area(row):
+    ver = row["Versão"]
+    area = row["Área"]
+    if ver == v_b: return CINZA_BUDGET
+    if ver == v_f: return PRETO_FORECAST
+    if ver == v_r:
+        val_f_local = df_proj_ver[df_proj_ver["Área"] == area][v_f].values[0] if v_f in df_proj_ver.columns else 0.0
+        return VERDE_REALIZADO if row["Val"] >= val_f_local else VERMELHO_REALIZADO
+    return "#CCCCCC"
+
+df_proj_melted["Cor_Chave"] = df_proj_melted.apply(calcular_cor_dinamica_area, axis=1)
+
+fig_p = px.bar(
+    df_proj_melted, 
+    x="Área", 
+    y="Val", 
+    color="Cor_Chave", 
+    barmode="group", 
+    text_auto='.2f',
+    hover_data=["Versão"],
+    color_discrete_sequence=df_proj_melted["Cor_Chave"].unique()
+)
+# Forçamos o mapeamento direto no plot do Plotly para evitar desalinhamento de legenda
+for idx, v_name in enumerate(df_proj_melted["Versão"].unique()):
+    fig_p.data[idx].name = v_name
+    fig_p.data[idx].marker.color = df_proj_melted[df_proj_melted["Versão"] == v_name]["Cor_Chave"].iloc[0]
+
 fig_p.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
 fig_p.update_layout(yaxis_tickformat='$', xaxis_title="Tipo / Área de Projeto", legend_title="Cenário", xaxis={'categoryorder':'total descending'}, height=450, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
 st.plotly_chart(fig_p, use_container_width=True)
     
 st.write("---")
 
-# --- GRÁFICO DE SITES CONFIRMADO (GRUPADO LADO A LADO) ---
+# --- GRÁFICO DE SITES PADRONIZADO (LADO A LADO E CORES DINÂMICAS) ---
 st.subheader("🏢 Distribuição de Recursos por Site / Planta (Budget vs Forecast vs Realizado)")
-df_planta_ver = df_f.groupby(["Planta", "Versão"])["Val"].sum().reset_index()
+df_planta_wide = df_f.groupby(["Planta", "Versão"])["Val"].sum().unstack(level="Versão").fillna(0).reset_index()
+df_planta_melted = pd.melt(df_planta_wide, id_vars=["Planta"], value_vars=[v for v in [v_b, v_f, v_r] if v in df_planta_wide.columns], var_name="Versão", value_name="Val")
+
+def calcular_cor_dinamica_planta(row):
+    ver = row["Versão"]
+    planta = row["Planta"]
+    if ver == v_b: return CINZA_BUDGET
+    if ver == v_f: return PRETO_FORECAST
+    if ver == v_r:
+        val_f_local = df_planta_wide[df_planta_wide["Planta"] == planta][v_f].values[0] if v_f in df_planta_wide.columns else 0.0
+        return VERDE_REALIZADO if row["Val"] >= val_f_local else VERMELHO_REALIZADO
+    return "#CCCCCC"
+
+df_planta_melted["Cor_Chave"] = df_planta_melted.apply(calcular_cor_dinamica_planta, axis=1)
 
 fig_pl = px.bar(
-    df_planta_ver, 
+    df_planta_melted, 
     x="Planta", 
     y="Val", 
-    color="Versão", 
+    color="Cor_Chave", 
     barmode="group", 
-    text_auto='.2f', 
-    color_discrete_sequence=px.colors.qualitative.Plotly_r
+    text_auto='.2f',
+    hover_data=["Versão"]
 )
+for idx, v_name in enumerate(df_planta_melted["Versão"].unique()):
+    fig_pl.data[idx].name = v_name
+    fig_pl.data[idx].marker.color = df_planta_melted[df_planta_melted["Versão"] == v_name]["Cor_Chave"].iloc[0]
+
 fig_pl.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
-fig_pl.update_layout(
-    yaxis_tickformat='$', 
-    xaxis_title="Site Planta", 
-    legend_title="Cenário",
-    xaxis={'categoryorder':'total descending'}, 
-    height=450, 
-    plot_bgcolor='rgba(0,0,0,0)', 
-    paper_bgcolor='rgba(0,0,0,0)'
-)
+fig_pl.update_layout(yaxis_tickformat='$', xaxis_title="Site Planta", legend_title="Cenário", xaxis={'categoryorder':'total descending'}, height=450, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
 st.plotly_chart(fig_pl, use_container_width=True)
 
 st.write("---")
@@ -329,9 +390,34 @@ st.subheader("📈 Evolução Mensal Temporal dos Desembolsos")
 df_ev = df_f.groupby(["Mês", "Versão"])["Val"].sum().reset_index()
 df_ev['Idx'] = df_ev['Mês'].map({m: i for i, m in enumerate(m_ord)})
 df_ev_sorted = df_ev.sort_values('Idx')
-df_ev_sorted['Label_Txt'] = df_ev_sorted['Val'].map(lambda x: f"${x:,.0f}")
 
-fig_ev = px.line(df_ev_sorted, x="Mês", y="Val", color="Versão", markers=True, text="Label_Txt", color_discrete_sequence=px.colors.qualitative.Plotly_r)
+df_ev_wide = df_ev_sorted.groupby(["Mês", "Versão"])["Val"].sum().unstack(level="Versão").fillna(0).reset_index()
+df_ev_melted = pd.melt(df_ev_wide, id_vars=["Mês"], value_vars=[v for v in [v_b, v_f, v_r] if v in df_ev_wide.columns], var_name="Versão", value_name="Val")
+df_ev_melted['Idx'] = df_ev_melted['Mês'].map({m: i for i, m in enumerate(m_ord)})
+df_ev_melted = df_ev_melted.sort_values('Idx')
+df_ev_melted['Label_Txt'] = df_ev_melted['Val'].map(lambda x: f"${x:,.0f}")
+
+def calcular_cor_dinamica_mensal(row):
+    ver = row["Versão"]
+    mes = row["Mês"]
+    if ver == v_b: return CINZA_BUDGET
+    if ver == v_f: return PRETO_FORECAST
+    if ver == v_r:
+        val_f_local = df_ev_wide[df_ev_wide["Mês"] == mes][v_f].values[0] if v_f in df_ev_wide.columns else 0.0
+        return VERDE_REALIZADO if row["Val"] >= val_f_local else VERMELHO_REALIZADO
+    return "#CCCCCC"
+
+df_ev_melted["Cor_Chave"] = df_ev_melted.apply(calcular_cor_dinamica_mensal, axis=1)
+
+fig_ev = px.line(
+    df_ev_melted, 
+    x="Mês", 
+    y="Val", 
+    color="Versão", 
+    markers=True, 
+    text="Label_Txt", 
+    color_discrete_map=MAPA_CORES_CENARIO
+)
 fig_ev.update_traces(textposition='top center')
 fig_ev.update_layout(yaxis_tickformat='$', height=400, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
 st.plotly_chart(fig_ev, use_container_width=True)
@@ -371,7 +457,14 @@ if v_b and v_r:
             "Métrica de Fechamento": ["Realizado YTD", "Projeção Final de Ano (Run Rate)", "Budget Anual Planejado"],
             "Valor (USD)": [val_real, proj_fim_ano, val_budg_anual]
         })
-        fig_run = px.bar(df_runrate, x="Métrica de Fechamento", y="Valor (USD)", text_auto='.2f', color="Métrica de Fechamento", color_discrete_sequence=["#336699", "#6699CC", "#343a40"])
+        fig_run = px.bar(
+            df_runrate, 
+            x="Métrica de Fechamento", 
+            y="Valor (USD)", 
+            text_auto='.2f', 
+            color="Métrica de Fechamento", 
+            color_discrete_sequence=[cor_realizado_global, "#336699", CINZA_BUDGET]
+        )
         fig_run.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
         fig_run.update_layout(yaxis_tickformat='$', showlegend=False, height=400, plot_bgcolor='rgba(0,0,0,0)')
         st.plotly_chart(fig_run, use_container_width=True)
@@ -385,7 +478,7 @@ if v_b and v_r:
             x="Nome do Projeto", 
             y=v_b, 
             text_auto='.0f', 
-            color_discrete_sequence=cor_graficos,
+            color_discrete_sequence=["#0066cc"],
             labels={v_b: "Budget YTD (USD)"}
         )
         fig_pareto.update_traces(texttemplate='$%{y:,.0f}', textposition='outside')
@@ -511,7 +604,7 @@ try:
             </div>
             <table class="kpi-table">
                 <tr>
-                    <td class="kpi-card"><div>REALIZADO YTD</div><div style="font-size:14pt;font-weight:bold;">$ {val_real:,.2f}</div></td>
+                    <td class="kpi-card" style="border-left-color: {cor_realizado_global} !important;"><div>REALIZADO YTD</div><div style="font-size:14pt;font-weight:bold;color:{cor_realizado_global};">$ {val_real:,.2f}</div></td>
                     <td class="kpi-card" style="background-color: {bg_card_b} !important; border-left-color: {cor_texto_b} !important;">
                         <div>BUDGET YTD</div>
                         <div style="font-size:14pt;font-weight:bold;">$ {val_budg:,.2f}</div>
