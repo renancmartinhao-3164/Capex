@@ -276,47 +276,35 @@ with col_kpi3:
         </div>
     """, unsafe_allow_html=True)
 
-# ==========================================
-# PARTE 5: VISUALIZAÇÕES GRÁFICAS STANDARD (Tudo em AZUL)
-# ==========================================
-st.write("---")
-cor_graficos = ["#0066cc"]
+st.subheader("🏢 Distribuição de Recursos por Site / Planta (Budget vs Forecast vs Realizado)")
 
-st.subheader(f"📊 Comparativo Geral Capex YTD (Jan a {m_lim}) - USD")
-fig_main = px.bar(df_f.groupby("Versão")["Val"].sum().reset_index(), x="Versão", y="Val", color_discrete_sequence=cor_graficos, text_auto='.2f')
-fig_main.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
-fig_main.update_layout(yaxis_tickformat='$', height=400, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-st.plotly_chart(fig_main, use_container_width=True)
+# 1. Agrupamos por Planta E Versão para separar os cenários
+df_planta_ver = df_f.groupby(["Planta", "Versão"])["Val"].sum().reset_index()
 
-st.write("---")
+# 2. Criamos o gráfico com barras agrupadas (lado a lado) utilizando a cor para diferenciar as Versões
+fig_pl = px.bar(
+    df_planta_ver, 
+    x="Planta", 
+    y="Val", 
+    color="Versão", 
+    barmode="group", 
+    text_auto='.2f', 
+    color_discrete_sequence=px.colors.qualitative.Plotly_r
+)
 
-st.subheader("📊 Cenários por Tipo de Categoria de Projeto (Budget vs Forecast vs Realizado)")
-df_proj_ver = df_f.groupby(["Área", "Versão"])["Val"].sum().reset_index()
-fig_p = px.bar(df_proj_ver, x="Área", y="Val", color="Versão", barmode="group", text_auto='.2f', color_discrete_sequence=px.colors.qualitative.Plotly_r)
-fig_p.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
-fig_p.update_layout(yaxis_tickformat='$', xaxis_title="Tipo / Área de Projeto", legend_title="Cenário", xaxis={'categoryorder':'total descending'}, height=450, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-st.plotly_chart(fig_p, use_container_width=True)
-    
-st.write("---")
-
-st.subheader("🏢 Distribuição Total de Recursos por Site (Plantas)")
-fig_pl = px.bar(df_f.groupby("Planta")["Val"].sum().reset_index().sort_values("Val", ascending=False), x="Planta", y="Val", color_discrete_sequence=cor_graficos, text_auto='.2f')
+# 3. Formatação executiva das labels e layout
 fig_pl.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
-fig_pl.update_layout(yaxis_tickformat='$', showlegend=False, xaxis_title="Site Planta", height=400, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+fig_pl.update_layout(
+    yaxis_tickformat='$', 
+    xaxis_title="Site Planta", 
+    legend_title="Cenário",
+    xaxis={'categoryorder':'total descending'}, 
+    height=450, 
+    plot_bgcolor='rgba(0,0,0,0)', 
+    paper_bgcolor='rgba(0,0,0,0)'
+)
+
 st.plotly_chart(fig_pl, use_container_width=True)
-
-st.write("---")
-
-st.subheader("📈 Evolução Mensal Temporal dos Desembolsos")
-df_ev = df_f.groupby(["Mês", "Versão"])["Val"].sum().reset_index()
-df_ev['Idx'] = df_ev['Mês'].map({m: i for i, m in enumerate(m_ord)})
-df_ev_sorted = df_ev.sort_values('Idx')
-df_ev_sorted['Label_Txt'] = df_ev_sorted['Val'].map(lambda x: f"${x:,.0f}")
-
-fig_ev = px.line(df_ev_sorted, x="Mês", y="Val", color="Versão", markers=True, text="Label_Txt", color_discrete_sequence=px.colors.qualitative.Plotly_r)
-fig_ev.update_traces(textposition='top center')
-fig_ev.update_layout(yaxis_tickformat='$', height=400, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
-st.plotly_chart(fig_ev, use_container_width=True)
 
 # =========================================================
 # PARTE 6: GRÁFICOS AVANÇADOS (MATRIZ, PREVISÃO, PARETO)
