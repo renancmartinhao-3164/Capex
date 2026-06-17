@@ -18,7 +18,7 @@ origem_dados = st.sidebar.radio(
     options=["Usar Última Base (Servidor)", "Fazer Upload de Novo Arquivo (.xlsx)"]
 )
 
-ARQUIVO_PADRAO = "seus_dados_capex.xlsx"
+ARQUIVO_PADRAO = "SA_CAPEX 2026_v1.xlsx"
 ARQUIVO_LOGO = "logo.jpg" 
 
 @st.cache_data
