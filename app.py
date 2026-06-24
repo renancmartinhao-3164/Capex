@@ -63,10 +63,10 @@ else:
         st.stop()
 
 # =========================================================
-# PARTE 2: PADRONIZAÇÃO E DESPIVOTEAMENTO (VERSÃO CORRIGIDA)
+# PARTE 2: PADRONIZAÇÃO E DESPIVOTEAMENTO (FIX FINAL)
 # =========================================================
 if df_base is not None:
-    # ✅ limpar nomes de colunas
+
     df_base.columns = df_base.columns.astype(str).str.strip()
 
     mapeamento_colunas = {}
@@ -74,45 +74,43 @@ if df_base is not None:
     for col in df_base.columns:
         col_lower = col.lower().strip()
 
-        # -----------------------------------
-        # MAPEAMENTOS PADRÃO
-        # -----------------------------------
-        if any(x in col_lower for x in ['versão', 'versao', 'cenário', 'cenario', 'tipo', 'cenarios','versoes']):
+        if any(x in col_lower for x in ['versão', 'versao']):
             mapeamento_colunas[col] = "Versão"
 
-        elif any(x in col_lower for x in ['planta', 'site', 'unidade', 'filial']):
+        elif any(x in col_lower for x in ['planta', 'site']):
             mapeamento_colunas[col] = "Planta"
 
-        elif any(x in col_lower for x in ['área', 'area', 'diretoria', 'setor']):
+        elif any(x in col_lower for x in ['área', 'area']):
             mapeamento_colunas[col] = "Área"
 
-        elif any(x in col_lower for x in ['codigo', 'código', 'id', 'item', 'wbs']):
+        elif any(x in col_lower for x in ['codigo', 'código', 'id']):
             mapeamento_colunas[col] = "Nro_Item Código"
 
-        elif any(x in col_lower for x in ['projeto', 'nome', 'descrição', 'descricao']):
+        elif any(x in col_lower for x in ['projeto', 'nome']):
             mapeamento_colunas[col] = "Nome do Projeto"
 
-        elif any(x in col_lower for x in ['ano', 'exercicio']):
+        elif any(x in col_lower for x in ['ano']):
             mapeamento_colunas[col] = "Ano"
 
-        elif any(x in col_lower for x in ['responsável', 'responsavel', 'owner']):
+        elif any(x in col_lower for x in ['responsável', 'responsavel']):
             mapeamento_colunas[col] = "Responsável"
 
-        # ✅ CORREÇÃO PRINCIPAL AQUI (Status CER incluso)
-        elif any(x in col_lower for x in ['status cer', 'status']):
-            mapeamento_colunas[col] = "Status"
+        # NÃO mapear status aqui → vamos tratar separado
 
-    # ✅ aplicar rename
     df_base = df_base.rename(columns=mapeamento_colunas)
 
-    # -----------------------------------
-    # GARANTIR COLUNAS OBRIGATÓRIAS
-    # -----------------------------------
+    # ✅ prioridade Status CER
+    if "Status CER" in df_base.columns:
+        df_base["Status"] = df_base["Status CER"]
+    elif "Status" not in df_base.columns:
+        df_base["Status"] = "Não Informado"
+
+    # ✅ remover duplicadas (ESSENCIAL)
+    df_base = df_base.loc[:, ~df_base.columns.duplicated()]
+
+    # ✅ garantir colunas
     if "Responsável" not in df_base.columns:
         df_base["Responsável"] = "Não Informado"
-
-    if "Status" not in df_base.columns:
-        df_base["Status"] = "Não Informado"
 
     if "Planta" not in df_base.columns:
         df_base["Planta"] = "Não Informado"
@@ -120,33 +118,22 @@ if df_base is not None:
     if "Área" not in df_base.columns:
         df_base["Área"] = "Não Informado"
 
-    # ✅ limpar valores de texto
+    # ✅ limpeza
     df_base["Status"] = df_base["Status"].astype(str).str.strip().replace("", "Não Informado")
-    df_base["Responsável"] = df_base["Responsável"].astype(str).str.strip().replace("", "Não Informado")
 
-    # -----------------------------------
-    # IDENTIFICAÇÃO DE MESES
-    # -----------------------------------
-    m_ord = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+    # ===================================
+    # MÊS
+    # ===================================
+    m_ord = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
     colunas_meses_encontradas = [m for m in m_ord if m in df_base.columns]
 
     colunas_identificadoras = [
         c for c in [
-            "Nro_Item Código",
-            "Nome do Projeto",
-            "Área",
-            "Planta",
-            "Versão",
-            "Ano",
-            "Responsável",
-            "Status"
-        ]
-        if c in df_base.columns
+            "Nro_Item Código","Nome do Projeto","Área",
+            "Planta","Versão","Ano","Responsável","Status"
+        ] if c in df_base.columns
     ]
 
-    # -----------------------------------
-    # DESPIVOTAMENTO (MELT)
-    # -----------------------------------
     if colunas_meses_encontradas:
         df_base = pd.melt(
             df_base,
@@ -156,27 +143,13 @@ if df_base is not None:
             value_name="Val"
         )
     else:
-        st.title("📊 Gestão Estratégica de Investimentos Capex")
-        st.error("⚠️ Nenhuma coluna de mês (Jan, Fev, Mar...) detectada no Excel.")
+        st.error("⚠️ Nenhuma coluna de mês detectada.")
         st.stop()
 
-# -----------------------------------
-# LIMPEZA FINAL
-# -----------------------------------
-df_base["Versão"] = df_base["Versão"].astype(str).str.strip()
-df_base["Mês"] = df_base["Mês"].astype(str).str.strip()
-df_base["Planta"] = df_base["Planta"].astype(str).str.strip()
-df_base["Área"] = df_base["Área"].astype(str).str.strip()
-
-# ✅ STATUS AGORA FUNCIONANDO
-df_base["Status"] = df_base["Status"].astype(str).str.strip()
-df_base["Status"] = df_base["Status"].replace(["nan", "None", ""], "Não Informado")
-
+# ✅ limpeza final
+df_base["Status"] = df_base["Status"].replace(["nan","None",""], "Não Informado")
 df_base["Val"] = pd.to_numeric(df_base["Val"], errors='coerce').fillna(0.0)
 
-if "Ano" in df_base.columns:
-    df_base["Ano"] = pd.to_numeric(df_base["Ano"], errors='coerce').fillna(0).astype(int)
-    
 # ==========================================
 # PARTE 3: FILTROS CORPORATIVOS DINÂMICOS
 # ==========================================
