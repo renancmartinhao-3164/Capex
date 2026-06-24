@@ -439,67 +439,82 @@ fig_ev.update_layout(yaxis_tickformat='$', height=400, plot_bgcolor='rgba(0,0,0,
 st.plotly_chart(fig_ev, use_container_width=True)
 
 # =========================================================
-# PARTE 6: GRÁFICOS AVANÇADOS (MATRIZ, PREVISÃO, PARETO)
+# PARTE 6: GRÁFICOS AVANÇADOS (CORRIGIDO)
 # =========================================================
 st.write("---")
 
 fig_scatter, fig_run, fig_pareto = None, None, None
 
-if v_b and v_r:
-    df_cross = df_f.groupby(["Nro_Item Código", "Nome do Projeto", "Área", "Planta", "Responsável", "Status", "Versão"])["Val"].sum().unstack(level="Versão").fillna(0).reset_index()
-    
-    if v_b in df_cross.columns and v_r in df_cross.columns:
-        df_cross["Atraso (USD)"] = df_cross[v_b] - df_cross[v_r]
-        df_cross["Atingimento %"] = (df_cross[v_r] / df_cross[v_b] * 100).fillna(0).clip(0, 200)
-        
-        st.subheader("🎯 Matriz de Alocação e Criticidade de Desvios")
-        fig_scatter = px.scatter(
-            df_cross[df_cross[v_b] > 0], x=v_b, y="Atraso (USD)", size=v_b, color="Área", hover_name="Nome do Projeto",
-            labels={v_b: "Budget YTD Aprovado (USD)", "Atraso (USD)": "Desvio / Atraso Cumulativo YTD (USD)"}, height=450,
-            color_discrete_sequence=px.colors.qualitative.Pastel_r
-        )
-        fig_scatter.update_layout(plot_bgcolor='#f8f9fa', paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_scatter, use_container_width=True)
-        st.write("---")
+# ✅ NOVA FORMA ROBUSTA DE IDENTIFICAR CATEGORIAS
+def classificar_versao(v):
+    v = str(v).lower()
+    if any(x in v for x in ['budget','orc']):
+        return "Budget"
+    elif any(x in v for x in ['fcast','forecast']):
+        return "Forecast"
+    elif any(x in v for x in ['real','realizado']):
+        return "Realizado"
+    else:
+        return "Outros"
 
-        st.subheader("🔮 Análise Preditiva de Fechamento (Run Rate Anual)")
-        n_meses_ytd = m_ord.index(m_lim) + 1
-        gasto_medio_mensal = val_real / n_meses_ytd
-        proj_fim_ano = val_real + (gasto_medio_mensal * (12 - n_meses_ytd))
-        
-        val_budg_anual = df_analise_base[df_analise_base["Versão"] == v_b]["Val"].sum() if v_b else 0.0
-        
-        df_runrate = pd.DataFrame({
-            "Métrica de Fechamento": ["Realizado YTD", "Projeção Final de Ano (Run Rate)", "Budget Anual Planejado"],
-            "Valor (USD)": [val_real, proj_fim_ano, val_budg_anual]
-        })
-        fig_run = px.bar(
-            df_runrate, 
-            x="Métrica de Fechamento", 
-            y="Valor (USD)", 
-            text_auto='.2f', 
-            color="Métrica de Fechamento", 
-            color_discrete_sequence=[cor_realizado_global, "#336699", CINZA_BUDGET]
-        )
-        fig_run.update_traces(texttemplate='$%{y:,.2f}', textposition='outside')
-        fig_run.update_layout(yaxis_tickformat='$', showlegend=False, height=400, plot_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_run, use_container_width=True)
-        st.write("---")
+# ✅ aplicar classificação
+df_f["Categoria"] = df_f["Versão"].apply(classificar_versao)
+df_analise_base["Categoria"] = df_analise_base["Versão"].apply(classificar_versao)
 
-        st.subheader("📊 Concentração de Linhas de Investimento (Pareto TOP 15)")
-        df_pareto = df_cross.groupby("Nome do Projeto")[v_b].sum().reset_index().sort_values(by=v_b, ascending=False)
-        
-        fig_pareto = px.bar(
-            df_pareto.head(15), 
-            x="Nome do Projeto", 
-            y=v_b, 
-            text_auto='.0f', 
-            color_discrete_sequence=["#0066cc"],
-            labels={v_b: "Budget YTD (USD)"}
-        )
-        fig_pareto.update_traces(texttemplate='$%{y:,.0f}', textposition='outside')
-        fig_pareto.update_layout(yaxis_tickformat='$', height=450, xaxis_tickangle=-45, plot_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig_pareto, use_container_width=True)
+# ✅ construir base cruzada corretamente
+df_cross = df_f.groupby([
+    "Nro_Item Código",
+    "Nome do Projeto",
+    "Área",
+    "Planta",
+    "Responsável",
+    "Status",
+    "Categoria"
+])["Val"].sum().unstack(level="Categoria").fillna(0).reset_index()
+
+# ✅ garantir colunas
+if "Budget" not in df_cross.columns:
+    df_cross["Budget"] = 0
+
+if "Forecast" not in df_cross.columns:
+    df_cross["Forecast"] = 0
+
+if "Realizado" not in df_cross.columns:
+    df_cross["Realizado"] = 0
+
+# ✅ cálculos
+df_cross["Atraso vs Budget"] = df_cross["Budget"] - df_cross["Realizado"]
+df_cross["Atraso vs Forecast"] = df_cross["Forecast"] - df_cross["Realizado"]
+
+# =========================================================
+# ✅ TABELA TOP 20 FORECAST (GARANTE QUE SEMPRE APARECE)
+# =========================================================
+st.subheader(f"⚠️ Análise de Desvios Críticos: TOP 20 Projetos em Atraso YTD vs. Fcast")
+
+df_atrasados_f = df_cross[df_cross["Atraso vs Forecast"] > 0].copy()
+
+if df_atrasados_f.empty:
+    st.success("✅ Nenhum projeto apresenta atraso vs Forecast.")
+else:
+    df_top_20_f = df_atrasados_f.sort_values(by="Atraso vs Forecast", ascending=False).head(20)
+
+    df_exibicao = df_top_20_f[[
+        "Nro_Item Código",
+        "Nome do Projeto",
+        "Área",
+        "Planta",
+        "Responsável",
+        "Status",
+        "Forecast",
+        "Realizado",
+        "Atraso vs Forecast"
+    ]].copy()
+
+    # ✅ formatar valores
+    for col in ["Forecast","Realizado","Atraso vs Forecast"]:
+        df_exibicao[col] = df_exibicao[col].map(lambda x: f"$ {x:,.2f}")
+
+    st.dataframe(df_exibicao, use_container_width=True, hide_index=True)
 
 # =========================================================
 # PARTE 7: TABELAS ANALÍTICAS DE ATRASOS (TOP 20)
